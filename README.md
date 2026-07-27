@@ -1,12 +1,30 @@
-# AI Champions Hub (Code)
+# AI Champions Hub
 
-A Power Apps **Code App** (Vite + React + TypeScript) that recreates the "AI Champions Hub"
-program-management app on top of the existing Dataverse data model. It runs locally with
-`pac code run` and deploys to Power Platform with `pac code push`.
+**A complete, end‑to‑end Power Apps solution for running an AI / Copilot enablement program.**
 
-The app helps a Copilot/AI enablement program run: onboarding champions, running learning
-campaigns, tracking activities and point-based claims, scheduling events, ranking a leaderboard,
-triaging license/connector requests, and configuring the program.
+AI Champions Hub is delivered as a **fresh, self‑contained solution** — importing it into any
+Power Platform environment provisions the entire **Dataverse data model** (13 tables, option sets
+and relationships) and the **React Code App** that runs on top of it. Nothing is assumed to
+pre‑exist: you get the database, the app, and the connector wiring from scratch.
+
+The app helps a program run day to day: onboarding champions, launching learning campaigns,
+tracking point‑based activity claims with evidence, scheduling events, ranking a leaderboard,
+triaging license/connector requests, reporting to leadership, and self‑branding the experience.
+
+> **Deploying to a new tenant?** Follow **[`deploy/DEPLOYMENT.md`](./deploy/DEPLOYMENT.md)** — it
+> walks through importing the schema solution and pushing the Code App, end to end.
+
+---
+
+## What's in the box
+
+| Layer | Delivered as | Contents |
+|-------|--------------|----------|
+| **Data model** | `deploy/solutions/AIChampionsHubApp_managed.zip` (and `_unmanaged.zip`) | 13 Dataverse tables, option sets, relationships — publisher **ABSGSA**, prefix `abs` |
+| **Application** | This repository (Vite + React + TypeScript) | The full Code App, deployed with `pac code push` |
+| **Connector** | `power.config.json` | **Office 365 Users** (people picker) + the 13 Dataverse data sources |
+
+The package contains **only this app's data model** — no unrelated or previous app is referenced.
 
 ---
 
@@ -14,118 +32,283 @@ triaging license/connector requests, and configuring the program.
 
 | | |
 |---|---|
-| **Home** — KPI cards (colored accent borders), pending work, completion donut, top champions | ![Home](docs/screenshots/01-home.png) |
-| **Champions** — filters + admin edit / disable / remove actions per card | ![Champions](docs/screenshots/02-champions.png) |
-| **Campaigns** — banner-image cards grouped by status | ![Campaigns](docs/screenshots/03-campaigns.png) |
-| **Campaign detail** — banner header, overview, audience & activity tabs | ![Campaign detail](docs/screenshots/10-campaign-detail.png) |
-| **Activities** — activity catalog + claims with evidence & approve/reject | ![Activities](docs/screenshots/04-activities.png) |
+| **Home** — five KPI cards (incl. *Campaigns At Risk* & *Trending Campaign*), pending claims, open requests, completion donut, top champions | ![Home](docs/screenshots/01-home.png) |
+| **Champions** — KPIs, search + status/department filters, per‑card admin **edit / disable / remove** | ![Champions](docs/screenshots/02-champions.png) |
+| **Campaigns** — banner‑image cards grouped into Active / Drafts / Expired / Completed with health badges | ![Campaigns](docs/screenshots/03-campaigns.png) |
+| **Campaign detail** — banner header, health score, overview, audience, activities / participants / events tabs | ![Campaign detail](docs/screenshots/10-campaign-detail.png) |
+| **Activities** — catalog + claims, filter by type **and campaign**, evidence upload, approve / reject | ![Activities](docs/screenshots/04-activities.png) |
 | **Events** — month calendar + upcoming list | ![Events](docs/screenshots/05-events.png) |
 | **Leaderboard** — champions / departments / campaigns ranking | ![Leaderboard](docs/screenshots/06-leaderboard.png) |
-| **Requests** — KPIs, filters, submit + triage | ![Requests](docs/screenshots/07-requests.png) |
-| **Customize** — per-user Light/Dark, font family & size with live preview | ![Customize](docs/screenshots/08-customize.png) |
-| **Settings** — program config, app admins & departments CRUD | ![Settings](docs/screenshots/09-settings.png) |
+| **Requests** — KPIs, filters, submit + threaded triage | ![Requests](docs/screenshots/07-requests.png) |
+| **Reports** *(admin)* — executive KPIs, department & type breakdowns, monthly trend, campaign performance (RAG), CSV / PDF export | ![Reports](docs/screenshots/11-reports.png) |
+| **Customize** — per‑user Light/Dark, font family & size with live preview | ![Customize](docs/screenshots/08-customize.png) |
+| **Settings** — program config, application admins & departments | ![Settings](docs/screenshots/09-settings.png) |
+| **App Theme & Branding** *(admin)* — brand color presets or custom hex + app logo upload, applied across the whole app | ![Branding](docs/screenshots/12-branding.png) |
+
+---
+
+## Solution architecture
+
+```mermaid
+flowchart TB
+    user([Program Manager / Champion])
+
+    subgraph player["Power Apps Player"]
+        subgraph app["AI Champions Hub — Code App (Vite + React + TS)"]
+            screens["Screens (11 routes)"]
+            shared["Shared UI<br/>KPI cards · pills · avatars · charts · modals"]
+            ctx["AppDataContext<br/>loads tables · role flags · points roll-up"]
+            theme["ThemeProvider<br/>per-user theme + app brand color/logo"]
+            svc["Generated services<br/>(typed, per table)"]
+            screens --> ctx
+            screens --> shared
+            screens --> theme
+            ctx --> svc
+        end
+    end
+
+    sdk["Power Apps Code SDK<br/>(@pa-client/power-code-sdk)"]
+
+    subgraph pp["Power Platform (target environment)"]
+        dv[("Dataverse<br/>13 abs_ tables")]
+        o365["Office 365 Users<br/>connector (GAL picker)"]
+    end
+
+    user --> player
+    svc --> sdk
+    theme --> sdk
+    sdk --> dv
+    sdk --> o365
+```
+
+**How it fits together**
+
+- **Screens** (one per route) render the UI and call into a single **`AppDataContext`** that loads
+  every table once, exposes lookup maps + the signed‑in user, computes role flags
+  (`isAdmin` / `isProgramManager` / `isAppAdmin`) and the points roll‑up.
+- **Generated, typed services** (regenerated by `pac code add‑data‑source`) are the only path to
+  Dataverse — no raw fetch. The **Code SDK** handles auth and transport.
+- **ThemeProvider** applies each champion's personal Light/Dark + font preferences *and* the
+  admin‑set application brand color + logo to CSS variables at the document root.
+- The **Office 365 Users** connector powers the GAL people picker used when adding champions.
+
+---
+
+## Data model
+
+Importing the solution creates these 13 tables (publisher **ABSGSA**, prefix `abs`; several
+columns carry the legacy `crd49_` prefix). Choice columns are integers with base `839560000`;
+all values + labels live in [`src/lib/enums.ts`](./src/lib/enums.ts).
+
+```mermaid
+erDiagram
+    abs_department  ||--o{ abs_champion              : "employs"
+    abs_champion    ||--o{ abs_campaign              : "owns"
+    abs_champion    ||--o{ abs_activityclaim         : "submits"
+    abs_activity    ||--o{ abs_activityclaim         : "claimed as"
+    abs_campaign    ||--o{ abs_activityclaim         : "context"
+    abs_activityclaim ||--o{ abs_claimevidence       : "proven by"
+    abs_campaign    ||--o{ abs_event                 : "schedules"
+    abs_champion    ||--o{ abs_request               : "raises"
+    abs_campaign    ||--o{ abs_campaigndepartment    : "targets"
+    abs_department  ||--o{ abs_campaigndepartment    : "targeted by"
+    abs_campaign    ||--o{ abs_campaignactivity      : "includes"
+    abs_activity    ||--o{ abs_campaignactivity      : "used in"
+    abs_campaign    ||--o{ abs_campaignparticipation : "joined via"
+    abs_champion    ||--o{ abs_campaignparticipation : "joins"
+
+    abs_champion {
+        string  abs_name PK
+        string  abs_userid "signed-in user (UPN)"
+        string  crd49_displayname
+        choice  crd49_role "ProgramManager | Champion"
+        choice  crd49_status "Active | Inactive | Pending"
+        int     crd49_totalpoints
+        date    crd49_joineddate
+        choice  crd49_appmode "Light | Dark"
+        choice  crd49_fontfamily
+        choice  crd49_fontsize
+        lookup  crd49_department FK
+    }
+    abs_department {
+        string  abs_name PK
+        string  crd49_description
+    }
+    abs_campaign {
+        string  abs_name PK
+        string  crd49_description
+        string  crd49_theme
+        string  crd49_imageurl "banner"
+        date    crd49_startdate
+        date    crd49_enddate
+        choice  crd49_status "Draft | Active | Completed"
+        lookup  crd49_campaignowner FK
+    }
+    abs_activity {
+        string  abs_name PK
+        string  crd49_description
+        int     crd49_points
+        choice  crd49_activitytype
+        choice  crd49_validationmode "SelfClaimed | ApprovalRequired"
+        string  crd49_lmslink
+    }
+    abs_activityclaim {
+        string  abs_name PK
+        choice  crd49_status "Pending | Approved | Rejected"
+        date    crd49_claimeddate
+        string  crd49_notes
+        lookup  crd49_activity FK
+        lookup  crd49_campaign FK
+        lookup  crd49_champion FK
+    }
+    abs_claimevidence {
+        string  abs_name PK
+        string  abs_filename
+        string  abs_notes "evidence URL / note"
+        lookup  abs_activityclaim FK
+    }
+    abs_event {
+        string  abs_name PK
+        string  crd49_description
+        date    crd49_eventdate
+        choice  crd49_format "Online | InPerson | Hybrid"
+        string  crd49_location
+        string  crd49_meetinglink
+        lookup  crd49_campaign FK
+    }
+    abs_request {
+        string  abs_name PK
+        choice  crd49_category "License | Connector | AgentSupport | ..."
+        choice  crd49_status "Open | InReview | Completed"
+        string  crd49_response
+        lookup  crd49_champion FK
+    }
+    abs_campaigndepartment {
+        string  abs_name PK
+        lookup  abs_campaign FK
+        lookup  abs_department FK
+    }
+    abs_campaignactivity {
+        string  abs_name PK
+        lookup  crd49_campaign FK
+        lookup  crd49_activity FK
+    }
+    abs_campaignparticipation {
+        string  abs_name PK
+        lookup  crd49_campaign FK
+        lookup  crd49_champion FK
+    }
+    abs_programsettings {
+        string  abs_name PK
+        string  abs_communityname
+        string  abs_copilotcommunityurl
+        string  crd49_sharepointurl "evidence library"
+        string  abs_brandcolor "app theme hex"
+        string  abs_applogo "logo (data URL)"
+        choice  crd49_selfnominationenabled
+        choice  crd49_activityapprovalrequired
+    }
+    abs_appadmin {
+        string  abs_name PK
+        string  abs_displayname
+        string  abs_addedby
+    }
+```
+
+| Area | Table | Purpose |
+|------|-------|---------|
+| People | `abs_champion` | Champion profile: user id, role, status, department, points, per‑user theme |
+| Org | `abs_department` | Departments |
+| Programs | `abs_campaign` | Learning campaigns: theme, banner, dates, status, owner |
+| Learning | `abs_activity` | Activities: type, points, validation mode, LMS link |
+| Claims | `abs_activityclaim` | A champion's claim of an activity (status, points context) |
+| Evidence | `abs_claimevidence` | Evidence link/note attached to a claim |
+| Events | `abs_event` | Events: date, format, location/link, campaign |
+| Requests | `abs_request` | License/connector/support requests with threaded response |
+| Join | `abs_campaigndepartment` | Campaign ↔ department audience (M:N) |
+| Join | `abs_campaignactivity` | Campaign ↔ activity (M:N) |
+| Join | `abs_campaignparticipation` | Campaign ↔ champion enrollment (M:N) |
+| Config | `abs_programsettings` | Single settings row: community, SharePoint URL, branding, toggles |
+| Admin | `abs_appadmin` | Application‑admin allow‑list |
+
+---
+
+## Routes & screens
+
+| Route | Screen | Highlights |
+|-------|--------|------------|
+| `/` | Home | KPI cards with colored accents + deltas — Active Champions, Active Campaigns, Activities Completed, **Campaigns At Risk**, **Trending Campaign**; pending claims, open requests, completion donut, top champions |
+| `/champions` | Champions | KPIs, search + status/department filters, add‑champion (GAL picker), per‑card **edit / disable / remove** (disable revokes app access) |
+| `/campaigns` | Campaigns | banner‑image cards in Active/Drafts/Expired/Completed tabs, health (RAG) badges, participant counts, new campaign |
+| `/campaigns/:id` | Campaign detail | banner header, health score, overview, audience, activities/participants/events tabs, join button (champions), edit (admin) |
+| `/activities` | Activities | catalog + claims tabs, filter by type **and campaign**, new activity, claim with evidence, approve/reject |
+| `/events` | Events | month calendar + upcoming list, new event |
+| `/leaderboard` | Leaderboard | champions / departments / campaigns ranking, department filter |
+| `/requests` | Requests | KPIs, filters, submit request, threaded triage |
+| `/reports` | Reports *(admin)* | executive KPIs, department & activity‑type breakdowns, monthly trend, campaign performance (RAG), requests/events overview, CSV + Print/PDF |
+| `/customize` | Customize | per‑user Light/Dark, font family & size — live preview + save |
+| `/settings` | Settings *(admin)* | program config, application admins, departments, **App Theme & Branding** (color + logo) |
+
+---
+
+## Key features
+
+- **Role gating.** The signed‑in user resolves to an `abs_champion` and/or `abs_appadmin` record.
+  `isAdmin = isProgramManager || isAppAdmin`. Admin‑only actions (managing champions, campaigns,
+  activities, claim approvals, events, request triage, reports and all of Settings) are hidden for
+  regular champions.
+- **Champion lifecycle & access control.** Admins can edit, **disable** (sets status Inactive) or
+  remove a champion. A disabled champion is blocked at app startup by an access gate; admins are
+  never locked out. Re‑enabling restores access.
+- **Campaign‑gated activities.** Activities always live under a campaign. Champions only see and
+  claim activities for campaigns they've **joined** and that are **live**; disabled/expired
+  campaigns automatically make their activities non‑claimable (derived, no schema change).
+- **Points & leaderboard.** Points come from **Approved** claims × `activity.points`; the
+  leaderboard ranks champions, departments (summed) and campaigns.
+- **Campaign health (RAG).** Each campaign is scored 0–100 (enrollment + pace) into
+  Green/Amber/Red, surfaced on cards, detail, Home ("Campaigns At Risk") and Reports.
+- **Per‑user personalization.** Each champion stores Light/Dark, font family and size (Customize),
+  applied via CSS variables and reverted on unmount unless saved.
+- **App‑wide branding (admin).** Settings → App Theme & Branding sets a brand color (presets or
+  custom hex) that recolors buttons, links, highlights, active nav **and the left panel**, plus an
+  uploaded **app logo** shown top‑left — stored on `abs_programsettings` for every user.
 
 ---
 
 ## Tech stack
 
 - **Vite 7** + **React 19** + **TypeScript** (strict)
-- **React Router** for the 10 client routes
-- **Power Apps Code SDK** (`@pa-client/power-code-sdk`) — auth + Dataverse data access
-- **Dataverse** — 13 existing tables (solution `AIChampionsHub`), never modified by this app
-
-## Data model (existing tables — read/write, not created here)
-
-| Area | Table (logical) | Notes |
-|------|------------------|-------|
-| People | `abs_champion` | display name, user id, role, status, department lookup, total points, theme prefs |
-| Org | `abs_department` | name, description |
-| Programs | `abs_campaign` | name, theme, dates, status, owner, audience via join |
-| Join | `abs_campaigndepartment` | campaign ↔ department audience |
-| Join | `abs_campaignactivity` | campaign ↔ activity |
-| Join | `abs_campaignparticipation` | campaign ↔ champion participation |
-| Learning | `abs_activity` | title, type, points, validation mode, LMS link |
-| Claims | `abs_activityclaim` | champion's claim of an activity, status, points |
-| Evidence | `abs_claimevidence` | uploaded evidence URL/file for a claim |
-| Events | `abs_event` | event date, format, location/link, campaign lookup |
-| Requests | `abs_request` | license/connector/other requests, status, response |
-| Config | `abs_programsettings` | single settings row (URLs, toggles) |
-| Admin | `abs_appadmin` | app admin allow-list |
-
-> Choice (option-set) columns are integers with base `839560000`. All values and their labels are
-> centralized in [`src/lib/enums.ts`](./src/lib/enums.ts).
-
-## Routes / screens
-
-| Route | Screen | Highlights |
-|-------|--------|------------|
-| `/` | Home | KPI cards with colored accent borders + month-over-month deltas, pending claims, open requests, completion donut, top champions, recent activity |
-| `/champions` | Champions | KPIs, status/department/search filters, add-champion, and per-card admin actions: **edit**, **disable/enable** (disable revokes app access), **remove** |
-| `/campaigns` | Campaigns | banner-image cards in active/draft/completed tabs, audience + participant counts, new campaign (admin) |
-| `/campaigns/:id` | Campaign detail | banner header, overview, audience, activities/participants/events tabs, edit (admin) |
-| `/activities` | Activities | activity catalog + claims tabs, new activity (admin), claim w/ evidence upload, approve/reject |
-| `/events` | Events | month calendar + upcoming list, new event (admin) |
-| `/leaderboard` | Leaderboard | champions / departments / campaigns ranking, department filter |
-| `/requests` | Requests | KPIs, filters, submit request, triage (admin) |
-| `/customize` | Customize | per-user Light/Dark, font family, font size — live preview + save |
-| `/settings` | Settings | program config, app admins CRUD, departments CRUD (admin) |
-
-## Architecture
-
-```
-src/
-  App.tsx                # Router + provider tree (data → theme → toast) with loading/error gates
-  main.tsx               # Entry, imports index.css
-  index.css              # Theme tokens (light/dark) + all component styles
-  lib/
-    enums.ts             # Option-set integer values + label maps + font stacks + optionsOf()
-    format.ts            # Date/number helpers
-  data/
-    entities.ts          # Single import point: aliased services, model types, EntitySet + bind()
-  generated/             # AUTOGENERATED by `pac code add-data-source` — do not edit
-    models/*Model.ts
-    services/*Service.ts
-  context/
-    AppDataContext.tsx   # Loads all tables once; exposes arrays, lookup maps, current user,
-                         # role flags (isAdmin/isProgramManager/isAppAdmin), points roll-up, reload()
-  theme/
-    ThemeProvider.tsx    # Applies champion theme prefs to :root; applyTheme()/resetToSaved()
-  components/            # Layout (sidebar/topbar), Modal, Toast, ui.tsx (Avatar/Pill/KpiCard/…)
-  screens/               # One file per route
-```
-
-**Role gating.** `AppDataContext` resolves the signed-in user to an `abs_champion` and/or
-`abs_appadmin` record. `isAdmin = isProgramManager || isAppAdmin`. Admin-only actions (add champion,
-create/edit campaign, create activity, approve/reject claims, create event, triage requests, all of
-Settings) are hidden for regular champions.
-
-**Champion management & access control.** Admins can edit a champion, **disable** them
-(sets status to Inactive), or remove them. A disabled champion is blocked at app startup by an
-access gate — admins are never locked out. Re-enabling restores access.
-
-**Points & leaderboard.** Points come from **Approved** claims joined to `activity.crd49_points`
-(`pointsByChampion` / `pointsFor` in the context), falling back to the stored
-`champion.crd49_totalpoints`. On approval the app also increments the stored total for fidelity with
-the original app. The leaderboard ranks champions, departments (summed), and campaigns.
-
-**Theme.** Each champion stores `crd49_appmode` (Light/Dark), `crd49_fontfamily`, `crd49_fontsize`.
-`ThemeProvider` writes these to `document.documentElement` as `data-theme` + CSS variables. The
-Customize screen previews changes live and reverts on unmount unless saved.
+- **React Router** for the 11 client routes
+- **Power Apps Code SDK** (`@pa-client/power-code-sdk`) — auth + Dataverse + connector access
+- **Dataverse** — 13 tables provisioned by the solution package
+- No charting library — Reports charts are lightweight inline SVG/CSS components
 
 ---
 
-## Prerequisites
+## Deploy to a new environment (fresh, end‑to‑end)
 
-- Node.js 24+ and npm 11+
-- Power Platform CLI (`pac`) 2.9+
-- Access to the target environment with the AI Champions Hub tables
-
-Verify auth (an auth profile pointing at the target environment must be selected):
+Full step‑by‑step (schema import + connections + Code App push, incl. cross‑tenant) is in
+**[`deploy/DEPLOYMENT.md`](./deploy/DEPLOYMENT.md)**. In short:
 
 ```powershell
-pac auth list
-pac org who
+# 1. Authenticate to the TARGET environment
+pac auth create --environment <TARGET_ENVIRONMENT_ID>
+
+# 2. Import the data model (managed for prod, unmanaged for dev)
+pac solution import --path .\deploy\solutions\AIChampionsHubApp_managed.zip --publish-changes
+
+# 3. Deploy the Code App from source
+npm install
+pac code init --displayName "AI Champions Hub (Code)"      # creates the app in the target env
+pac code add-data-source -a office365users -c <CONNECTION_ID>   # bind the people-picker connection
+npm run build
+pac code push
 ```
+
+Then sign in as an admin and complete first‑run setup in **Settings** (community name/URL,
+SharePoint evidence library URL, departments, admins, branding).
+
+---
 
 ## Local development
 
@@ -134,8 +317,9 @@ npm install
 pac code run
 ```
 
-`pac code run` starts the Vite dev server (port 3000) and the Code Apps host so the Power Apps SDK
-can authenticate and reach Dataverse. Open the URL it prints.
+`pac code run` starts the Code Apps host, and `npm run dev` (Vite, port 3000) serves the app. Open
+the **Local Play** URL that the Vite Power Apps plugin prints. (`pac code run` can also print a play
+URL that points at `localhost:3000`.)
 
 ## Build
 
@@ -143,20 +327,38 @@ can authenticate and reach Dataverse. Open the URL it prints.
 npm run build   # tsc -b && vite build  → dist/
 ```
 
-## Deploy
+---
 
-```powershell
-npm run build
-pac code push
+## Project structure
+
+```
+src/
+  App.tsx                # Router + provider tree (data → theme → toast) with loading/error gates
+  index.css              # Theme tokens (light/dark) + brand variables + all component styles
+  lib/
+    enums.ts             # Option-set integer values + label maps + font stacks
+    branding.ts          # Brand presets + color math + applyBrand() (drives CSS variables)
+    access.ts            # Campaign/activity gating helpers
+    campaignHealth.ts    # RAG scoring
+    reports.ts           # Report data builders + CSV/print export
+    format.ts            # Date/number helpers
+  data/entities.ts       # Aliased services, model types, EntitySet + bind()
+  generated/             # AUTOGENERATED by pac code add-data-source — do not edit
+  context/AppDataContext.tsx   # Loads tables once; role flags; points roll-up; reload()
+  theme/ThemeProvider.tsx      # Per-user theme + app brand color/logo → document root
+  components/            # Layout, Modal, Toast, ui.tsx (Avatar/Pill/KpiCard/HealthBadge/…), charts.tsx
+  screens/               # One file per route
+
+deploy/
+  DEPLOYMENT.md          # Cross-tenant deployment guide
+  solutions/             # AIChampionsHubApp_managed.zip + _unmanaged.zip (schema only)
 ```
 
-`power.config.json` holds the target `appId` / `environmentId` and the 13 Dataverse data-source
-references. `pac code push` uploads `dist/` to that existing Code App — it does **not** create a new
-app on each push.
+---
 
 ## Working with data
 
-Always go through the generated services (never raw fetch/axios), and read `result.data`:
+Always go through the generated services and read `result.data`:
 
 ```typescript
 import { ChampionsSvc } from "./data/entities";
@@ -173,10 +375,15 @@ const champions = res.data ?? [];
 - Lookups are set with an `@odata.bind` payload key (see `bind()` in `data/entities.ts`) and read
   from the `_<lookup>_value` field.
 - Choice fields take integer values from `src/lib/enums.ts`.
-- The `generated/` folder is regenerated by `pac code add-data-source`; don't hand-edit it.
+- The `generated/` folder is regenerated by `pac code add-data-source`; don't hand‑edit it.
+
+---
 
 ## Notes
 
-- This app **connects to existing tables** and never creates or alters schema.
 - A harmless libuv `Assertion failed` line can print at the end of some `pac` commands on Windows;
   it does not affect the operation.
+
+---
+
+_Developed by **Zafar Ul Islam** ([zafaru@microsoft.com](mailto:zafaru@microsoft.com))._
