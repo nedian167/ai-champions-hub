@@ -44,7 +44,7 @@ export function KpiCard({
   delta?: number;
 }) {
   return (
-    <div className="kpi">
+    <div className="kpi" style={{ '--kpi-accent': iconColor ?? 'var(--primary)' } as CSSProperties}>
       <div className="kpi-top">
         <span className="kpi-label">{label}</span>
         {icon && (
