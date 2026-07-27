@@ -1237,7 +1237,7 @@ h4 {
 .reports-title { margin: 0; font-size: 1.5rem; font-weight: 800; }
 .reports-sub { margin: 4px 0 0; color: var(--text-muted); font-size: 0.9rem; }
 .reports-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.reports-kpi { margin-bottom: 4px; }
+.reports-kpi { margin-bottom: 4px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
 .section-label {
   font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.04em; color: var(--text-muted); margin: 4px 0 8px;

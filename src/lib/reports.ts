@@ -217,8 +217,7 @@ export function toCsv(headers: string[], rows: (string | number)[][]): string {
   return [headers.map(esc).join(','), ...rows.map((r) => r.map(esc).join(','))].join('\r\n');
 }
 
-export function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]): void {
-  const csv = toCsv(headers, rows);
+function triggerDownload(filename: string, csv: string): void {
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -228,4 +227,62 @@ export function downloadCsv(filename: string, headers: string[], rows: (string |
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]): void {
+  triggerDownload(filename, toCsv(headers, rows));
+}
+
+/**
+ * Consolidated export — every report section in a single CSV file, each block
+ * prefixed with its section title and separated by a blank line (opens cleanly
+ * in Excel / Google Sheets).
+ */
+export function downloadFullReport(i: ReportInputs, filename = 'ai-champions-program-report.csv'): void {
+  const s = execSummary(i);
+  const blocks: string[] = [];
+  const section = (title: string, headers: string[], rows: (string | number)[][]) => {
+    blocks.push(title, toCsv(headers, rows), '');
+  };
+
+  blocks.push(toCsv(['AI Champions Program Report', `Generated ${new Date().toLocaleString()}`], []), '');
+
+  section('Executive Summary', ['Metric', 'Value'], [
+    ['Active champions', s.activeChampions],
+    ['Total champions', s.totalChampions],
+    ['Adoption rate %', s.adoptionRate],
+    ['Total points awarded', s.totalPoints],
+    ['Approved claims', s.approvedClaims],
+    ['Approval rate %', s.approvalRate],
+    ['Live campaigns', s.liveCampaigns],
+    ['Avg campaign health', s.avgHealth],
+    ['Open requests', s.openRequests],
+  ]);
+
+  section('Champions by Department', ['Department', 'Champions', 'Active', 'Points'],
+    byDepartment(i).map((d) => [d.department, d.champions, d.active, d.points]));
+
+  section('Completions by Activity Type', ['Activity type', 'Completed'],
+    completionsByType(i).map((t) => [t.type, t.completed]));
+
+  section('Monthly Trend (last 6 months)', ['Month', 'Champions joined', 'Activities completed'],
+    monthlyTrend(i).map((t) => [t.label, t.joined, t.completed]));
+
+  section('Campaign Performance',
+    ['Campaign', 'Status', 'Enrolled', 'Activities', 'Completed', 'Completion %', 'Health', 'Score'],
+    campaignPerformance(i).map((c) => [c.name, c.status, c.enrolled, c.activities, c.completed, c.completion, c.health, c.score]));
+
+  section('Requests by Category', ['Category', 'Count'],
+    requestsByCategory(i).map((r) => [r.label, r.value]));
+
+  section('Requests by Status', ['Status', 'Count'],
+    requestsByStatus(i).map((r) => [r.label, r.value]));
+
+  const ev = eventStats(i);
+  section('Events Overview', ['Metric', 'Value'], [
+    ['Total', ev.total], ['Upcoming', ev.upcoming], ['Past', ev.past],
+    ['Online', ev.online], ['In-person', ev.inPerson],
+  ]);
+
+  triggerDownload(filename, blocks.join('\r\n'));
 }

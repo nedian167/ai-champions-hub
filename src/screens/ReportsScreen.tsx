@@ -4,18 +4,10 @@ import { useAppData } from '../context/AppDataContext';
 import { Card, KpiCard, EmptyState, HealthBadge } from '../components/ui';
 import { BarList, ColumnChart, StackBar, ReportTable, type BarDatum } from '../components/charts';
 import {
-  execSummary, byDepartment, claimOutcomes, completionsByType, campaignPerformance,
-  requestsByCategory, requestsByStatus, monthlyTrend, eventStats, downloadCsv,
+  execSummary, byDepartment, completionsByType, campaignPerformance,
+  requestsByCategory, requestsByStatus, monthlyTrend, eventStats, downloadFullReport,
   type ReportInputs,
 } from '../lib/reports';
-
-function CsvButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button className="btn btn-ghost btn-sm no-print" onClick={onClick} title="Download this report as CSV">
-      ⬇ CSV
-    </button>
-  );
-}
 
 export default function ReportsScreen() {
   const data = useAppData();
@@ -38,7 +30,6 @@ export default function ReportsScreen() {
 
   const summary = useMemo(() => execSummary(inputs), [inputs]);
   const depts = useMemo(() => byDepartment(inputs), [inputs]);
-  const outcomes = useMemo(() => claimOutcomes(inputs), [inputs]);
   const types = useMemo(() => completionsByType(inputs), [inputs]);
   const campaignRows = useMemo(() => campaignPerformance(inputs), [inputs]);
   const reqCat = useMemo(() => requestsByCategory(inputs), [inputs]);
@@ -78,31 +69,16 @@ export default function ReportsScreen() {
           <button className="btn btn-ghost" onClick={() => window.print()} title="Print or save as PDF">🖨 Print / PDF</button>
           <button
             className="btn btn-primary"
-            onClick={() => {
-              downloadCsv(
-                'ai-champions-program-summary.csv',
-                ['Metric', 'Value'],
-                [
-                  ['Active champions', summary.activeChampions],
-                  ['Total champions', summary.totalChampions],
-                  ['Adoption rate %', summary.adoptionRate],
-                  ['Total points awarded', summary.totalPoints],
-                  ['Approved claims', summary.approvedClaims],
-                  ['Approval rate %', summary.approvalRate],
-                  ['Live campaigns', summary.liveCampaigns],
-                  ['Avg campaign health', summary.avgHealth],
-                  ['Open requests', summary.openRequests],
-                ],
-              );
-            }}
+            onClick={() => downloadFullReport(inputs)}
+            title="Download the full report (all sections) as one CSV"
           >
-            ⬇ Export summary
+            ⬇ Export report
           </button>
         </div>
       </div>
 
       {/* Executive KPI row */}
-      <div className="grid-kpi reports-kpi">
+      <div className="grid grid-kpi reports-kpi">
         <KpiCard label="Active Champions" value={summary.activeChampions}
           icon="🧑‍🚀" iconColor="var(--blue)" sub={`${summary.adoptionRate}% of ${summary.totalChampions} adoption`} />
         <KpiCard label="Points Awarded" value={summary.totalPoints.toLocaleString()}
@@ -116,65 +92,29 @@ export default function ReportsScreen() {
       </div>
 
       <div className="grid-2">
-        <Card
-          title="Champions by Department"
-          action={<CsvButton onClick={() => downloadCsv('champions-by-department.csv',
-            ['Department', 'Champions', 'Active', 'Points'],
-            depts.map((d) => [d.department, d.champions, d.active, d.points]))} />}
-        >
+        <Card title="Champions by Department">
           <BarList data={deptBars} emptyLabel="No champions yet" />
         </Card>
-
-        <Card
-          title="Points by Department"
-          action={<CsvButton onClick={() => downloadCsv('points-by-department.csv',
-            ['Department', 'Points'], deptPointBars.map((d) => [d.label, d.value]))} />}
-        >
+        <Card title="Points by Department">
           <BarList data={deptPointBars} unit="pts" emptyLabel="No points awarded yet" />
         </Card>
       </div>
 
       <div className="grid-2">
-        <Card
-          title="Claim Outcomes"
-          action={<CsvButton onClick={() => downloadCsv('claim-outcomes.csv',
-            ['Status', 'Count'],
-            [['Approved', outcomes.approved], ['Pending', outcomes.pending], ['Rejected', outcomes.rejected]])} />}
-        >
-          <StackBar
-            segments={[
-              { label: 'Approved', value: outcomes.approved, color: 'green' },
-              { label: 'Pending', value: outcomes.pending, color: 'amber' },
-              { label: 'Rejected', value: outcomes.rejected, color: 'red' },
-            ]}
-          />
-        </Card>
-
-        <Card
-          title="Completions by Activity Type"
-          action={<CsvButton onClick={() => downloadCsv('completions-by-type.csv',
-            ['Activity type', 'Completed'], types.map((t) => [t.type, t.completed]))} />}
-        >
+        <Card title="Completions by Activity Type">
           <BarList data={typeBars} emptyLabel="No approved claims yet" />
+        </Card>
+        <Card title="Requests by Category">
+          <BarList data={reqCatBars} emptyLabel="No requests yet" />
         </Card>
       </div>
 
-      <Card
-        title="Monthly Trend — Champions joined vs. Activities completed (last 6 months)"
-        action={<CsvButton onClick={() => downloadCsv('monthly-trend.csv',
-          ['Month', 'Champions joined', 'Activities completed'],
-          trend.map((t) => [t.label, t.joined, t.completed]))} />}
-      >
+      <Card title="Monthly Trend — Champions joined vs. Activities completed (last 6 months)">
         <ColumnChart data={trend.map((t) => ({ label: t.label, a: t.joined, b: t.completed }))}
           seriesA="Champions joined" seriesB="Activities completed" colorA="blue" colorB="green" />
       </Card>
 
-      <Card
-        title="Campaign Performance"
-        action={<CsvButton onClick={() => downloadCsv('campaign-performance.csv',
-          ['Campaign', 'Status', 'Enrolled', 'Activities', 'Completed', 'Completion %', 'Health', 'Score'],
-          campaignRows.map((c) => [c.name, c.status, c.enrolled, c.activities, c.completed, c.completion, c.health, c.score]))} />}
-      >
+      <Card title="Campaign Performance">
         {campaignRows.length === 0 ? (
           <EmptyState title="No campaigns yet" />
         ) : (
@@ -193,19 +133,7 @@ export default function ReportsScreen() {
       </Card>
 
       <div className="grid-2">
-        <Card
-          title="Requests by Category"
-          action={<CsvButton onClick={() => downloadCsv('requests-by-category.csv',
-            ['Category', 'Count'], reqCat.map((r) => [r.label, r.value]))} />}
-        >
-          <BarList data={reqCatBars} emptyLabel="No requests yet" />
-        </Card>
-
-        <Card
-          title="Requests by Status"
-          action={<CsvButton onClick={() => downloadCsv('requests-by-status.csv',
-            ['Status', 'Count'], reqStatus.map((r) => [r.label, r.value]))} />}
-        >
+        <Card title="Requests by Status">
           <StackBar
             segments={[
               { label: reqStatus[0]?.label ?? 'Open', value: reqStatus[0]?.value ?? 0, color: 'blue' },
@@ -216,17 +144,17 @@ export default function ReportsScreen() {
             ]}
           />
         </Card>
-      </div>
 
-      <Card title="Events Overview">
-        <div className="ev-stat-row">
-          <div className="ev-stat"><div className="ev-stat-num">{evStats.total}</div><div className="ev-stat-lbl">Total</div></div>
-          <div className="ev-stat"><div className="ev-stat-num">{evStats.upcoming}</div><div className="ev-stat-lbl">Upcoming</div></div>
-          <div className="ev-stat"><div className="ev-stat-num">{evStats.past}</div><div className="ev-stat-lbl">Past</div></div>
-          <div className="ev-stat"><div className="ev-stat-num">{evStats.online}</div><div className="ev-stat-lbl">Online</div></div>
-          <div className="ev-stat"><div className="ev-stat-num">{evStats.inPerson}</div><div className="ev-stat-lbl">In-person</div></div>
-        </div>
-      </Card>
+        <Card title="Events Overview">
+          <div className="ev-stat-row">
+            <div className="ev-stat"><div className="ev-stat-num">{evStats.total}</div><div className="ev-stat-lbl">Total</div></div>
+            <div className="ev-stat"><div className="ev-stat-num">{evStats.upcoming}</div><div className="ev-stat-lbl">Upcoming</div></div>
+            <div className="ev-stat"><div className="ev-stat-num">{evStats.past}</div><div className="ev-stat-lbl">Past</div></div>
+            <div className="ev-stat"><div className="ev-stat-num">{evStats.online}</div><div className="ev-stat-lbl">Online</div></div>
+            <div className="ev-stat"><div className="ev-stat-num">{evStats.inPerson}</div><div className="ev-stat-lbl">In-person</div></div>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
