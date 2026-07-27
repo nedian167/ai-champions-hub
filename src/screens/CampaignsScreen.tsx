@@ -88,7 +88,7 @@ export default function CampaignsScreen() {
     expired: campaigns.filter((c) => isCampaignExpired(c)).length,
   };
 
-  const shown = campaigns.filter((c) => effectiveCampaignStatus(c) === tab);
+  const shown = campaigns.filter((c) => effectiveCampaignStatus(c) === tab && (isAdmin || c.crd49_status !== CampaignStatus.Draft));
 
   function openBanner(c: Abs_campaigns) {
     setBanner(c);
@@ -164,7 +164,7 @@ export default function CampaignsScreen() {
 
       <div className="grid grid-kpi">
         <KpiCard label="Active Campaigns" value={counts.active} icon="🚀" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => setTab('active')} />
-        <KpiCard label="Drafts" value={counts.draft} icon="🕑" iconBg="var(--gray-soft)" iconColor="var(--gray)" onClick={() => setTab('draft')} />
+        {isAdmin && <KpiCard label="Drafts" value={counts.draft} icon="🕑" iconBg="var(--gray-soft)" iconColor="var(--gray)" onClick={() => setTab('draft')} />}
         <KpiCard label="Expired" value={counts.expired} icon="⏰" iconBg="var(--amber-soft)" iconColor="var(--amber)" onClick={() => setTab('expired')} />
         <KpiCard label="Completed" value={counts.completed} icon="✅" iconBg="var(--blue-soft)" iconColor="var(--blue)" onClick={() => setTab('completed')} />
       </div>
@@ -175,7 +175,7 @@ export default function CampaignsScreen() {
           onChange={setTab}
           tabs={[
             { key: 'active', label: `Active (${counts.active})` },
-            { key: 'draft', label: `Drafts (${counts.draft})` },
+            ...(isAdmin ? [{ key: 'draft' as Tab, label: `Drafts (${counts.draft})` }] : []),
             { key: 'expired', label: `Expired (${counts.expired})` },
             { key: 'completed', label: `Completed (${counts.completed})` },
           ]}

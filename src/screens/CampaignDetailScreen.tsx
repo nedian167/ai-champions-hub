@@ -77,6 +77,12 @@ export default function CampaignDetailScreen() {
     );
   }
 
+  if (!isAdmin && campaign.crd49_status === CampaignStatus.Draft) {
+    return (
+      <Card><EmptyState icon="🚧" title="Campaign not available" message="This campaign is still in draft and hasn't been published yet." action={<button className="btn btn-secondary" onClick={() => nav('/campaigns')}>Back to campaigns</button>} /></Card>
+    );
+  }
+
   async function save() {
     setSaving(true);
     try {
