@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, type ReactNode } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { AppMode, FontFamily, FontFamilyStack, FontSize, FontSizeScale } from '../lib/enums';
+import { applyBrand } from '../lib/branding';
 
 interface ThemeSelection {
   appmode?: number;
@@ -31,7 +32,12 @@ function apply(sel: ThemeSelection) {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const { currentChampion } = useAppData();
+  const { currentChampion, settings } = useAppData();
+
+  // Program-wide brand color (set by admins) — applied for every user.
+  useEffect(() => {
+    applyBrand(settings?.abs_brandcolor);
+  }, [settings?.abs_brandcolor]);
 
   const resetToSaved = useCallback(() => {
     apply({

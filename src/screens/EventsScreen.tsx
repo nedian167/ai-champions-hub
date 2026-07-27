@@ -21,19 +21,31 @@ export default function EventsScreen() {
     location: '', meetinglink: '', imageurl: '',
   });
 
-  const online = events.filter((e) => e.crd49_format === EventFormat.Online).length;
-  const inPerson = events.filter((e) => e.crd49_format === EventFormat.InPerson).length;
+  // "Upcoming" = today or later (with a 1-day grace); anything earlier is "past".
+  const upcomingCutoff = Date.now() - 864e5;
+  const isUpcoming = (e: typeof events[number]) => new Date(e.crd49_eventdate).getTime() >= upcomingCutoff;
 
-  const [detail, setDetail] = useState<null | 'all' | 'online' | 'inperson'>(null);
+  const upcomingOnline = events.filter((e) => isUpcoming(e) && e.crd49_format === EventFormat.Online).length;
+  const upcomingInPerson = events.filter((e) => isUpcoming(e) && e.crd49_format === EventFormat.InPerson).length;
+  const pastCount = events.filter((e) => !isUpcoming(e)).length;
+
+  const [detail, setDetail] = useState<null | 'all' | 'online' | 'inperson' | 'past'>(null);
   const detailEvents = useMemo(() => {
+    const cutoff = Date.now() - 864e5;
+    const up = (e: typeof events[number]) => new Date(e.crd49_eventdate).getTime() >= cutoff;
     const list = detail === 'online'
-      ? events.filter((e) => e.crd49_format === EventFormat.Online)
+      ? events.filter((e) => up(e) && e.crd49_format === EventFormat.Online)
       : detail === 'inperson'
-        ? events.filter((e) => e.crd49_format === EventFormat.InPerson)
-        : events;
+        ? events.filter((e) => up(e) && e.crd49_format === EventFormat.InPerson)
+        : detail === 'past'
+          ? events.filter((e) => !up(e))
+          : events;
     return [...list].sort((a, b) => (a.crd49_eventdate ?? '').localeCompare(b.crd49_eventdate ?? ''));
   }, [detail, events]);
-  const detailTitle = detail === 'online' ? 'Online Events' : detail === 'inperson' ? 'In-Person Events' : 'All Events';
+  const detailTitle = detail === 'online' ? 'Upcoming Online Events'
+    : detail === 'inperson' ? 'Upcoming In-Person Events'
+    : detail === 'past' ? 'Past Events'
+    : 'All Events';
 
   const upcoming = useMemo(
     () => [...events]
@@ -103,8 +115,9 @@ export default function EventsScreen() {
 
       <div className="grid grid-kpi">
         <KpiCard label="Total Events" value={events.length} icon="📅" iconBg="var(--blue-soft)" iconColor="var(--blue)" onClick={() => setDetail('all')} />
-        <KpiCard label="Online" value={online} icon="💻" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => setDetail('online')} />
-        <KpiCard label="In-Person" value={inPerson} icon="📍" iconBg="var(--purple-soft)" iconColor="var(--purple)" onClick={() => setDetail('inperson')} />
+        <KpiCard label="Online" sub="upcoming" value={upcomingOnline} icon="💻" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => setDetail('online')} />
+        <KpiCard label="In-Person" sub="upcoming" value={upcomingInPerson} icon="📍" iconBg="var(--purple-soft)" iconColor="var(--purple)" onClick={() => setDetail('inperson')} />
+        <KpiCard label="Past Events" value={pastCount} icon="🗂️" iconBg="var(--gray-soft)" iconColor="var(--gray)" onClick={() => setDetail('past')} />
       </div>
 
       <div className="grid grid-2 mt-24">

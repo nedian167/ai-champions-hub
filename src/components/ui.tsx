@@ -25,6 +25,24 @@ export function Pill({ color, children }: { color: PillColor; children: ReactNod
   return <span className={`pill ${color}`}>{children}</span>;
 }
 
+/* ---------------- Health badge (RAG) ---------------- */
+export function HealthBadge({
+  level, label, score, title, showScore = false,
+}: {
+  level: 'green' | 'amber' | 'red' | 'gray';
+  label: string;
+  score?: number;
+  title?: string;
+  showScore?: boolean;
+}) {
+  return (
+    <span className={`health-badge ${level}`} title={title}>
+      <span className="health-dot" />
+      {label}{showScore && typeof score === 'number' ? ` · ${score}` : ''}
+    </span>
+  );
+}
+
 /* ---------------- KPI card ---------------- */
 export function KpiCard({
   label,
@@ -199,10 +217,39 @@ export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) =
 }
 
 /* ---------------- Donut ---------------- */
-export function Donut({ percent, centerLabel }: { percent: number; centerLabel?: ReactNode }) {
+export interface DonutSegment { value: number; color: string; }
+
+export function Donut({
+  percent,
+  centerLabel,
+  segments,
+}: {
+  percent: number;
+  centerLabel?: ReactNode;
+  segments?: DonutSegment[];
+}) {
   const pct = Math.max(0, Math.min(100, Math.round(percent)));
+
+  let background: string;
+  const total = segments?.reduce((s, x) => s + x.value, 0) ?? 0;
+  if (segments && total > 0) {
+    // Build a multi-color conic gradient from the segments.
+    const stops: string[] = [];
+    let acc = 0;
+    for (const seg of segments) {
+      if (seg.value <= 0) continue;
+      const start = (acc / total) * 100;
+      acc += seg.value;
+      const end = (acc / total) * 100;
+      stops.push(`${seg.color} ${start}% ${end}%`);
+    }
+    background = `conic-gradient(${stops.join(', ')})`;
+  } else {
+    background = `conic-gradient(var(--green) calc(${pct} * 1%), var(--surface-2) 0)`;
+  }
+
   return (
-    <div className="donut" style={{ '--pct': pct } as CSSProperties}>
+    <div className="donut" style={{ '--pct': pct, background } as CSSProperties}>
       <div className="donut-hole">{centerLabel ?? `${pct}%`}</div>
     </div>
   );

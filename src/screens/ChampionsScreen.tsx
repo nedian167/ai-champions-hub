@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
 import { ChampionsSvc, bind, type Abs_champions } from '../data/entities';
 import { Card, KpiCard, Pill, Avatar, EmptyState, SearchInput, Field } from '../components/ui';
@@ -18,9 +19,15 @@ function statusColor(s?: number): PillColor {
 export default function ChampionsScreen() {
   const { champions, departments, departmentById, pointsFor, isAdmin, reload } = useAppData();
   const toast = useToast();
+  const location = useLocation();
 
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<number | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<number | 'all'>(
+    () => {
+      const s = (location.state as { statusFilter?: number } | null)?.statusFilter;
+      return typeof s === 'number' ? s : 'all';
+    },
+  );
   const [deptFilter, setDeptFilter] = useState<string>('all');
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -177,9 +184,9 @@ export default function ChampionsScreen() {
       </div>
 
       <div className="grid grid-kpi">
-        <KpiCard label="Total Champions" value={champions.length} icon="🧑‍🚀" iconBg="var(--purple-soft)" iconColor="var(--purple)" />
-        <KpiCard label="Active" value={active} icon="✅" iconBg="var(--green-soft)" iconColor="var(--green)" />
-        <KpiCard label="Pending Approval" value={pending} icon="⏳" iconBg="var(--amber-soft)" iconColor="var(--amber)" />
+        <KpiCard label="Total Champions" value={champions.length} icon="🧑‍🚀" iconBg="var(--purple-soft)" iconColor="var(--purple)" onClick={() => setStatusFilter('all')} />
+        <KpiCard label="Active" value={active} icon="✅" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => setStatusFilter(ChampionStatus.Active)} />
+        <KpiCard label="Pending Approval" value={pending} icon="⏳" iconBg="var(--amber-soft)" iconColor="var(--amber)" onClick={() => setStatusFilter(ChampionStatus.Pending)} />
       </div>
 
       <div className="row mt-24">

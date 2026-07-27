@@ -2,14 +2,17 @@ import { useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
 import { CampaignsSvc, CampaignDepartmentsSvc, bind, type Abs_campaigns } from '../data/entities';
-import { Card, KpiCard, Pill, EmptyState, Tabs, Field } from '../components/ui';
+import { Card, KpiCard, Pill, HealthBadge, EmptyState, Tabs, Field } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { CampaignStatus, CampaignStatusLabel, optionsOf } from '../lib/enums';
 import { formatDate, toDateInput } from '../lib/format';
-import { campaignStatusColor } from './HomeScreen';
+import {
+  effectiveCampaignStatus, effectiveStatusColor, effectiveStatusLabel, isCampaignExpired,
+} from '../lib/campaignStatus';
+import { computeCampaignHealth } from '../lib/campaignHealth';
 
-type Tab = 'active' | 'draft' | 'completed';
+type Tab = 'active' | 'draft' | 'completed' | 'expired';
 
 const BANNER_FALLBACK: Record<number, string> = {
   [CampaignStatus.Active]: 'linear-gradient(135deg, #0ea5e9 0%, #2563eb 55%, #7c3aed 100%)',
@@ -30,7 +33,8 @@ function bannerStyle(c: Abs_campaigns): CSSProperties {
 export default function CampaignsScreen() {
   const nav = useNavigate();
   const {
-    campaigns, departments, champions, campaignDepartments, participations, currentChampion, isAdmin, reload,
+    campaigns, departments, champions, campaignDepartments, participations,
+    campaignActivities, claims, currentChampion, isAdmin, reload,
   } = useAppData();
   const toast = useToast();
 
@@ -70,17 +74,21 @@ export default function CampaignsScreen() {
     return m;
   }, [participations]);
 
+  const healthByCampaign = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof computeCampaignHealth>>();
+    const input = { participations, campaignActivities, claims, campaignDepartments, champions };
+    for (const c of campaigns) m.set(c.abs_campaignid, computeCampaignHealth(c, input));
+    return m;
+  }, [campaigns, participations, campaignActivities, claims, campaignDepartments, champions]);
+
   const counts = {
-    active: campaigns.filter((c) => c.crd49_status === CampaignStatus.Active).length,
+    active: campaigns.filter((c) => effectiveCampaignStatus(c) === 'active').length,
     draft: campaigns.filter((c) => c.crd49_status === CampaignStatus.Draft).length,
     completed: campaigns.filter((c) => c.crd49_status === CampaignStatus.Completed).length,
+    expired: campaigns.filter((c) => isCampaignExpired(c)).length,
   };
 
-  const shown = campaigns.filter((c) =>
-    tab === 'active' ? c.crd49_status === CampaignStatus.Active
-      : tab === 'draft' ? c.crd49_status === CampaignStatus.Draft
-        : c.crd49_status === CampaignStatus.Completed,
-  );
+  const shown = campaigns.filter((c) => effectiveCampaignStatus(c) === tab && (isAdmin || c.crd49_status !== CampaignStatus.Draft));
 
   function openBanner(c: Abs_campaigns) {
     setBanner(c);
@@ -155,9 +163,10 @@ export default function CampaignsScreen() {
       </div>
 
       <div className="grid grid-kpi">
-        <KpiCard label="Active Campaigns" value={counts.active} icon="🚀" iconBg="var(--green-soft)" iconColor="var(--green)" />
-        <KpiCard label="Drafts" value={counts.draft} icon="🕑" iconBg="var(--gray-soft)" iconColor="var(--gray)" />
-        <KpiCard label="Completed" value={counts.completed} icon="✅" iconBg="var(--blue-soft)" iconColor="var(--blue)" />
+        <KpiCard label="Active Campaigns" value={counts.active} icon="🚀" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => setTab('active')} />
+        {isAdmin && <KpiCard label="Drafts" value={counts.draft} icon="🕑" iconBg="var(--gray-soft)" iconColor="var(--gray)" onClick={() => setTab('draft')} />}
+        <KpiCard label="Expired" value={counts.expired} icon="⏰" iconBg="var(--amber-soft)" iconColor="var(--amber)" onClick={() => setTab('expired')} />
+        <KpiCard label="Completed" value={counts.completed} icon="✅" iconBg="var(--blue-soft)" iconColor="var(--blue)" onClick={() => setTab('completed')} />
       </div>
 
       <div className="mt-24">
@@ -166,26 +175,33 @@ export default function CampaignsScreen() {
           onChange={setTab}
           tabs={[
             { key: 'active', label: `Active (${counts.active})` },
-            { key: 'draft', label: `Drafts (${counts.draft})` },
+            ...(isAdmin ? [{ key: 'draft' as Tab, label: `Drafts (${counts.draft})` }] : []),
+            { key: 'expired', label: `Expired (${counts.expired})` },
             { key: 'completed', label: `Completed (${counts.completed})` },
           ]}
         />
       </div>
 
       {shown.length === 0 ? (
-        <Card><EmptyState icon="📣" title="No campaigns here" message="Create a campaign to get started." /></Card>
+        <Card><EmptyState icon={tab === 'expired' ? '⏰' : '📣'} title={tab === 'expired' ? 'No expired campaigns' : 'No campaigns here'} message={tab === 'expired' ? 'Active campaigns move here automatically once their end date passes.' : 'Create a campaign to get started.'} /></Card>
       ) : (
         <div className="grid grid-cards">
           {shown.map((c) => {
             const audience = deptsByCampaign.get(c.abs_campaignid);
+            const eff = effectiveCampaignStatus(c);
+            const expired = eff === 'expired';
             return (
-              <div className="card campaign-card" key={c.abs_campaignid} onClick={() => nav(`/campaigns/${c.abs_campaignid}`)}>
+              <div className={`card campaign-card${expired ? ' campaign-expired' : ''}`} key={c.abs_campaignid} onClick={() => nav(`/campaigns/${c.abs_campaignid}`)}>
                 <div className="cc-banner" style={bannerStyle(c)}>
                   <div className="cc-banner-pills">
                     <Pill color={audience && audience.length ? 'purple' : 'gray'}>
                       🌐 {audience && audience.length ? audience.join(', ') : 'All Employees'}
                     </Pill>
-                    <Pill color={campaignStatusColor(c.crd49_status)}>{CampaignStatusLabel[c.crd49_status]}</Pill>
+                    <Pill color={effectiveStatusColor(eff)}>{effectiveStatusLabel[eff]}</Pill>
+                    {isAdmin && (() => {
+                      const h = healthByCampaign.get(c.abs_campaignid);
+                      return h ? <HealthBadge level={h.level} label={h.label} title={h.reasons.join('\n')} /> : null;
+                    })()}
                   </div>
                   {canEditBanner(c) && (
                     <button
@@ -206,7 +222,9 @@ export default function CampaignsScreen() {
                   <div className="row">
                     <span className="item-sub">👥 {partCount.get(c.abs_campaignid) ?? 0}</span>
                     <span className="spacer" />
-                    <span className="item-sub">📅 {formatDate(c.crd49_startdate)}</span>
+                    <span className="item-sub">
+                      {expired ? `⏰ Ended ${formatDate(c.crd49_enddate)}` : `📅 ${formatDate(c.crd49_startdate)}`}
+                    </span>
                   </div>
                 </div>
               </div>

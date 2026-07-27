@@ -1,22 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import {
   ProgramSettingsSvc, AppAdminsSvc, DepartmentsSvc,
 } from '../data/entities';
-import { Card, Field, Toggle, EmptyState, Avatar } from '../components/ui';
+import { Card, Field, Toggle, EmptyState, Avatar, Pill } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { formatDate } from '../lib/format';
+import { BRAND_PRESETS, DEFAULT_BRAND, normalizeBrand, applyBrand } from '../lib/branding';
 
 export default function SettingsScreen() {
-  const { settings, appAdmins, departments, isAdmin, currentUser, reload } = useAppData();
+  const { settings, appAdmins, champions, departments, isAdmin, currentUser, reload } = useAppData();
   const toast = useToast();
 
   const [cfg, setCfg] = useState({
     selfNom: settings?.crd49_selfnominationenabled ?? false,
     approval: settings?.crd49_activityapprovalrequired ?? false,
     community: settings?.abs_copilotcommunityurl ?? '',
+    communityName: settings?.abs_communityname ?? '',
     sharepoint: settings?.crd49_sharepointurl ?? '',
+    brand: normalizeBrand(settings?.abs_brandcolor) ?? DEFAULT_BRAND,
+    logo: settings?.abs_applogo ?? '',
   });
   const [savingCfg, setSavingCfg] = useState(false);
 
@@ -26,17 +30,112 @@ export default function SettingsScreen() {
       selfNom: settings?.crd49_selfnominationenabled ?? false,
       approval: settings?.crd49_activityapprovalrequired ?? false,
       community: settings?.abs_copilotcommunityurl ?? '',
+      communityName: settings?.abs_communityname ?? '',
       sharepoint: settings?.crd49_sharepointurl ?? '',
+      brand: normalizeBrand(settings?.abs_brandcolor) ?? DEFAULT_BRAND,
+      logo: settings?.abs_applogo ?? '',
     });
   }, [settings]);
 
+  // Revert any unsaved live brand preview when leaving the screen.
+  useEffect(() => () => applyBrand(settings?.abs_brandcolor), [settings?.abs_brandcolor]);
+
+  // Live-preview a brand color across the whole app as the admin picks it.
+  function previewBrand(hex: string) {
+    setCfg((c) => ({ ...c, brand: hex }));
+    applyBrand(hex);
+  }
+
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Read an image file, downscale it (max 96px) and store as a compact data URL.
+  function onLogoFile(file: File) {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 96;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/png');
+        if (dataUrl.length > 280000) {
+          toast.error('That image is too large even after resizing. Try a simpler logo.');
+          return;
+        }
+        setCfg((c) => ({ ...c, logo: dataUrl }));
+      };
+      img.onerror = () => toast.error('Could not read that image.');
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => toast.error('Could not read that file.');
+    reader.readAsDataURL(file);
+  }
+
   const [showAdmin, setShowAdmin] = useState(false);
-  const [adminForm, setAdminForm] = useState({ userid: '', displayname: '' });
+  const [elevateId, setElevateId] = useState('');
   const [deptModal, setDeptModal] = useState<{ id?: string; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Admins are matched to people by UPN — build a set to filter the champion picker.
+  const adminUpns = useMemo(
+    () => new Set(appAdmins.map((a) => (a.abs_userid || '').toLowerCase())),
+    [appAdmins],
+  );
+
+  // Champions who aren't already admins can be elevated.
+  const eligibleChampions = useMemo(
+    () => champions
+      .filter((c) => c.abs_userid && !adminUpns.has(c.abs_userid.toLowerCase()))
+      .sort((a, b) => (a.crd49_displayname || '').localeCompare(b.crd49_displayname || '')),
+    [champions, adminUpns],
+  );
+
+  // The "default" admin is the earliest-added one (the seeded environment admin).
+  const defaultAdminId = useMemo(() => {
+    if (appAdmins.length === 0) return null;
+    return [...appAdmins]
+      .sort((a, b) => {
+        const ta = new Date(a.abs_addeddate ?? '').getTime() || Infinity;
+        const tb = new Date(b.abs_addeddate ?? '').getTime() || Infinity;
+        return ta - tb;
+      })[0].abs_appadminid;
+  }, [appAdmins]);
+
+  // Reason an admin can't be demoted (null = allowed). The default admin is
+  // protected until at least one other admin exists; the last admin can never go.
+  function demoteBlockReason(a: typeof appAdmins[number]): string | null {
+    if (appAdmins.length <= 1) {
+      return a.abs_appadminid === defaultAdminId
+        ? 'The default administrator can\u2019t be removed while they are the only admin. Assign another admin first.'
+        : 'At least one administrator must remain.';
+    }
+    return null;
+  }
+
+  const credit = (
+    <div className="settings-credit">
+      <span className="settings-credit-label">Developed by:</span> Zafar Ul Islam (<a href="mailto:zafaru@microsoft.com">zafaru@microsoft.com</a>)
+    </div>
+  );
+
   if (!isAdmin) {
-    return <Card><EmptyState icon="🔒" title="Admins only" message="Program settings are available to Program Managers and App Admins." /></Card>;
+    return (
+      <>
+        <Card><EmptyState icon="🔒" title="Admins only" message="Program settings are available to Program Managers and App Admins." /></Card>
+        {credit}
+      </>
+    );
   }
 
   async function saveConfig() {
@@ -46,7 +145,10 @@ export default function SettingsScreen() {
         crd49_selfnominationenabled: cfg.selfNom,
         crd49_activityapprovalrequired: cfg.approval,
         abs_copilotcommunityurl: cfg.community.trim() || null,
+        abs_communityname: cfg.communityName.trim() || null,
         crd49_sharepointurl: cfg.sharepoint.trim() || null,
+        abs_brandcolor: normalizeBrand(cfg.brand) === DEFAULT_BRAND ? null : normalizeBrand(cfg.brand),
+        abs_applogo: cfg.logo || null,
       };
       if (settings) {
         const res = await ProgramSettingsSvc.update(settings.abs_programsettingsid, fields as never);
@@ -65,36 +167,38 @@ export default function SettingsScreen() {
     }
   }
 
-  async function addAdmin() {
-    if (!adminForm.userid.trim()) { toast.error('User ID is required.'); return; }
+  async function elevateAdmin() {
+    const champ = champions.find((c) => c.abs_championid === elevateId);
+    if (!champ || !champ.abs_userid) { toast.error('Select a champion to elevate.'); return; }
     setBusy(true);
     try {
       const res = await AppAdminsSvc.create({
-        abs_userid: adminForm.userid.trim(),
-        abs_displayname: adminForm.displayname.trim() || adminForm.userid.trim(),
+        abs_userid: champ.abs_userid,
+        abs_displayname: champ.crd49_displayname || champ.abs_userid,
         abs_addedby: currentUser?.userPrincipalName || 'system',
         abs_addeddate: new Date().toISOString(),
       } as never);
       if (!res.success) throw new Error(res.error?.message ?? 'Create failed');
-      toast.success('Admin added.');
-      setShowAdmin(false);
-      setAdminForm({ userid: '', displayname: '' });
+      toast.success(`${champ.crd49_displayname || 'Champion'} is now an admin.`);
+      setElevateId('');
       await reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to add admin.');
+      toast.error(e instanceof Error ? e.message : 'Failed to elevate champion.');
     } finally {
       setBusy(false);
     }
   }
 
-  async function removeAdmin(id: string) {
+  async function demoteAdmin(a: typeof appAdmins[number]) {
+    const reason = demoteBlockReason(a);
+    if (reason) { toast.error(reason); return; }
     setBusy(true);
     try {
-      await AppAdminsSvc.delete(id);
-      toast.success('Admin removed.');
+      await AppAdminsSvc.delete(a.abs_appadminid);
+      toast.success('Admin demoted.');
       await reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to remove admin.');
+      toast.error(e instanceof Error ? e.message : 'Failed to demote admin.');
     } finally {
       setBusy(false);
     }
@@ -164,7 +268,10 @@ export default function SettingsScreen() {
             <Toggle on={cfg.approval} onChange={(v) => setCfg({ ...cfg, approval: v })} />
           </div>
           <div className="divider" />
-          <Field label="Copilot Community URL" help="Shows a floating community button on every page.">
+          <Field label="AI Champions Community Name" help="Label shown on the floating community button.">
+            <input className="input" value={cfg.communityName} onChange={(e) => setCfg({ ...cfg, communityName: e.target.value })} placeholder="AI Champions Community" />
+          </Field>
+          <Field label="AI Champions Community URL" help="Shows a floating community button on every page.">
             <input className="input" value={cfg.community} onChange={(e) => setCfg({ ...cfg, community: e.target.value })} placeholder="https://…" />
           </Field>
           <Field label="SharePoint document library URL" help="Where champions upload evidence for claims.">
@@ -177,16 +284,23 @@ export default function SettingsScreen() {
             <EmptyState icon="👮" title="No app admins" message="Add an admin to grant elevated access." />
           ) : (
             <div className="list">
-              {appAdmins.map((a) => (
-                <div className="list-item" key={a.abs_appadminid}>
-                  <Avatar name={a.abs_displayname || a.abs_userid} size={34} />
-                  <div className="center-col spacer">
-                    <span className="item-title">{a.abs_displayname || a.abs_userid}</span>
-                    <span className="item-sub">{a.abs_userid} · added {formatDate(a.abs_addeddate)}</span>
+              {appAdmins.map((a) => {
+                const reason = demoteBlockReason(a);
+                const isDefault = a.abs_appadminid === defaultAdminId;
+                return (
+                  <div className="list-item" key={a.abs_appadminid}>
+                    <Avatar name={a.abs_displayname || a.abs_userid} size={34} />
+                    <div className="center-col spacer">
+                      <span className="item-title">
+                        {a.abs_displayname || a.abs_userid}
+                        {isDefault && <> <Pill color="purple">Default</Pill></>}
+                      </span>
+                      <span className="item-sub">{a.abs_userid} · added {formatDate(a.abs_addeddate)}</span>
+                    </div>
+                    <button className="btn btn-ghost btn-sm" disabled={busy || !!reason} title={reason ?? 'Demote this admin'} onClick={() => demoteAdmin(a)}>Demote</button>
                   </div>
-                  <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => removeAdmin(a.abs_appadminid)}>Remove</button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Card>
@@ -214,37 +328,138 @@ export default function SettingsScreen() {
         )}
       </Card>
 
+      <Card
+        className="mt-24"
+        title="🎨 App Theme & Branding"
+        action={<button className="btn btn-primary btn-sm" disabled={savingCfg} onClick={saveConfig}>{savingCfg ? 'Saving…' : 'Save'}</button>}
+      >
+        <p className="item-sub" style={{ marginTop: 0 }}>
+          Choose a brand color to recolor buttons, links, highlights and the active navigation across the whole app for every user.
+        </p>
+        <div className="brand-logo-row">
+          <div className="brand-logo-preview">
+            {cfg.logo ? <img src={cfg.logo} alt="App logo preview" /> : <span>🤖</span>}
+          </div>
+          <div className="center-col spacer">
+            <span className="item-title">App logo</span>
+            <span className="item-sub">Shown at the top of the left panel. Square PNG/JPG works best — it's resized automatically.</span>
+          </div>
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onLogoFile(f);
+              e.target.value = '';
+            }}
+          />
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => logoInputRef.current?.click()}>
+            {cfg.logo ? 'Replace' : 'Upload'}
+          </button>
+          {cfg.logo && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCfg((c) => ({ ...c, logo: '' }))}>
+              Remove
+            </button>
+          )}
+        </div>
+        <div className="divider" />
+        <div className="brand-swatches">
+          {BRAND_PRESETS.map((p) => {
+            const active = normalizeBrand(cfg.brand) === p.color;
+            return (
+              <button
+                type="button"
+                key={p.key}
+                className={`brand-swatch${active ? ' active' : ''}`}
+                style={{ background: p.color }}
+                title={p.label}
+                aria-label={p.label}
+                onClick={() => previewBrand(p.color)}
+              >
+                {active && <span className="brand-swatch-check">✓</span>}
+              </button>
+            );
+          })}
+        </div>
+        <div className="divider" />
+        <div className="brand-custom-row">
+          <Field label="Custom brand color" help="Pick any color to match your organization's branding.">
+            <div className="brand-custom-inputs">
+              <input
+                type="color"
+                className="brand-color-input"
+                value={normalizeBrand(cfg.brand) ?? DEFAULT_BRAND}
+                onChange={(e) => previewBrand(e.target.value)}
+              />
+              <input
+                className="input"
+                value={cfg.brand}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCfg((c) => ({ ...c, brand: v }));
+                  const norm = normalizeBrand(v);
+                  if (norm) applyBrand(norm);
+                }}
+                placeholder="#5b5bd6"
+                style={{ maxWidth: 140 }}
+              />
+            </div>
+          </Field>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            disabled={normalizeBrand(cfg.brand) === DEFAULT_BRAND}
+            onClick={() => previewBrand(DEFAULT_BRAND)}
+          >
+            Reset to default
+          </button>
+        </div>
+        <p className="item-sub">Changes preview instantly — click <strong>Save</strong> to apply them for everyone.</p>
+      </Card>
+
       {showAdmin && (
         <Modal
           title="Manage Admins"
           onClose={() => setShowAdmin(false)}
-          footer={
-            <>
-              <button className="btn btn-secondary" onClick={() => setShowAdmin(false)}>Close</button>
-              <button className="btn btn-primary" disabled={busy} onClick={addAdmin}>{busy ? 'Adding…' : 'Add Admin'}</button>
-            </>
-          }
+          footer={<button className="btn btn-secondary" onClick={() => setShowAdmin(false)}>Done</button>}
         >
-          <div className="field-row">
-            <Field label="User ID (email / UPN)"><input className="input" value={adminForm.userid} onChange={(e) => setAdminForm({ ...adminForm, userid: e.target.value })} placeholder="user@contoso.com" /></Field>
-            <Field label="Display name"><input className="input" value={adminForm.displayname} onChange={(e) => setAdminForm({ ...adminForm, displayname: e.target.value })} /></Field>
-          </div>
-          {appAdmins.length > 0 && (
-            <>
-              <div className="divider" />
-              <div className="list">
-                {appAdmins.map((a) => (
-                  <div className="list-item" key={a.abs_appadminid}>
-                    <div className="center-col spacer">
-                      <span className="item-title">{a.abs_displayname || a.abs_userid}</span>
-                      <span className="item-sub">{a.abs_userid}</span>
-                    </div>
-                    <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => removeAdmin(a.abs_appadminid)}>Remove</button>
-                  </div>
+          <Field label="Elevate a champion to admin" help="Grant program-admin access to an existing champion.">
+            <div className="field-row" style={{ gap: 8, alignItems: 'flex-end' }}>
+              <select className="input spacer" value={elevateId} onChange={(e) => setElevateId(e.target.value)} disabled={eligibleChampions.length === 0}>
+                <option value="">{eligibleChampions.length === 0 ? 'All champions are already admins' : 'Select a champion…'}</option>
+                {eligibleChampions.map((c) => (
+                  <option key={c.abs_championid} value={c.abs_championid}>
+                    {c.crd49_displayname || c.abs_userid}{c.crd49_departmentname ? ` · ${c.crd49_departmentname}` : ''}
+                  </option>
                 ))}
-              </div>
-            </>
-          )}
+              </select>
+              <button className="btn btn-primary" disabled={busy || !elevateId} onClick={elevateAdmin}>{busy ? 'Working…' : 'Elevate'}</button>
+            </div>
+          </Field>
+
+          <div className="divider" />
+          <div className="section-label">Current admins ({appAdmins.length})</div>
+          <div className="list">
+            {appAdmins.map((a) => {
+              const reason = demoteBlockReason(a);
+              const isDefault = a.abs_appadminid === defaultAdminId;
+              return (
+                <div className="list-item" key={a.abs_appadminid}>
+                  <Avatar name={a.abs_displayname || a.abs_userid} size={32} />
+                  <div className="center-col spacer">
+                    <span className="item-title">
+                      {a.abs_displayname || a.abs_userid}
+                      {isDefault && <> <Pill color="purple">Default</Pill></>}
+                    </span>
+                    <span className="item-sub">{a.abs_userid}</span>
+                  </div>
+                  <button className="btn btn-ghost btn-sm" disabled={busy || !!reason} title={reason ?? 'Demote this admin'} onClick={() => demoteAdmin(a)}>Demote</button>
+                </div>
+              );
+            })}
+          </div>
         </Modal>
       )}
 
@@ -262,6 +477,8 @@ export default function SettingsScreen() {
           <Field label="Name"><input className="input" value={deptModal.name} onChange={(e) => setDeptModal({ ...deptModal, name: e.target.value })} autoFocus /></Field>
         </Modal>
       )}
+
+      {credit}
     </>
   );
 }

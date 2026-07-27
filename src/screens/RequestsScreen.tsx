@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
 import { RequestsSvc, bind } from '../data/entities';
 import { Card, KpiCard, Pill, EmptyState, SearchInput, Field } from '../components/ui';
@@ -26,10 +27,12 @@ function statusColor(s?: number): PillColor {
 export default function RequestsScreen() {
   const { requests, championById, currentChampion, currentUser, isAdmin, reload } = useAppData();
   const toast = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState<number | 'all'>('all');
-  const [statusFilter, setStatusFilter] = useState<number | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<number | 'all' | 'completed'>('all');
   const [showNew, setShowNew] = useState(false);
   const [convo, setConvo] = useState<Abs_requests | null>(null);
   const [convoStatus, setConvoStatus] = useState<number>(RequestStatus.Open);
@@ -38,26 +41,41 @@ export default function RequestsScreen() {
 
   const [form, setForm] = useState({ title: '', category: RequestCategory.License as number, description: '' });
 
-  const isOwner = (r: Abs_requests) =>
-    !!currentChampion && r._crd49_champion_value === currentChampion.abs_championid;
+  const myUpn = (currentUser?.userPrincipalName ?? '').toLowerCase();
+  const isOwner = (r: Abs_requests) => {
+    if (currentChampion && r._crd49_champion_value === currentChampion.abs_championid) return true;
+    const champ = championById.get(r._crd49_champion_value ?? '');
+    return !!myUpn && (champ?.abs_userid ?? '').toLowerCase() === myUpn;
+  };
 
   const myName = currentUser?.fullName
     || currentChampion?.crd49_displayname
     || (isAdmin ? 'Administrator' : 'Requester');
 
+  // Admins triage every request; a champion only sees and manages their own.
+  const visibleRequests = useMemo(
+    () => (isAdmin ? requests : requests.filter(isOwner)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [requests, isAdmin, currentChampion, myUpn, championById],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return requests.filter((r) => {
+    return visibleRequests.filter((r) => {
       if (catFilter !== 'all' && r.crd49_category !== catFilter) return false;
-      if (statusFilter !== 'all' && r.crd49_status !== statusFilter) return false;
+      if (statusFilter === 'completed') {
+        if (r.crd49_status !== RequestStatus.Approved && r.crd49_status !== RequestStatus.Fulfilled) return false;
+      } else if (statusFilter !== 'all' && r.crd49_status !== statusFilter) {
+        return false;
+      }
       if (q && !`${r.abs_title ?? ''} ${r.crd49_description ?? ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [requests, search, catFilter, statusFilter]);
+  }, [visibleRequests, search, catFilter, statusFilter]);
 
-  const open = requests.filter((r) => r.crd49_status === RequestStatus.Open).length;
-  const inReview = requests.filter((r) => r.crd49_status === RequestStatus.InReview).length;
-  const completed = requests.filter((r) => r.crd49_status === RequestStatus.Approved || r.crd49_status === RequestStatus.Fulfilled).length;
+  const open = visibleRequests.filter((r) => r.crd49_status === RequestStatus.Open).length;
+  const inReview = visibleRequests.filter((r) => r.crd49_status === RequestStatus.InReview).length;
+  const completed = visibleRequests.filter((r) => r.crd49_status === RequestStatus.Approved || r.crd49_status === RequestStatus.Fulfilled).length;
 
   async function createRequest() {
     if (!currentChampion) { toast.error('No champion record found for you.'); return; }
@@ -89,6 +107,21 @@ export default function RequestsScreen() {
     setConvoStatus(r.crd49_status);
     setMsgText('');
   }
+
+  // Auto-open a request when navigated here from another screen (e.g. Home).
+  const autoOpenedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const targetId = (location.state as { openRequestId?: string } | null)?.openRequestId;
+    if (!targetId || autoOpenedRef.current === targetId) return;
+    const target = requests.find((r) => r.abs_requestid === targetId);
+    if (target && (isAdmin || isOwner(target))) {
+      autoOpenedRef.current = targetId;
+      openConvo(target);
+      // Clear the navigation state so it doesn't re-open on back/refresh.
+      navigate(location.pathname, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location, requests, navigate]);
 
   async function sendMessage() {
     if (!convo) return;
@@ -132,16 +165,16 @@ export default function RequestsScreen() {
       <div className="page-header">
         <div>
           <h1>Requests</h1>
-          <div className="page-subtitle">Ask for licenses, connectors and AI support.</div>
+          <div className="page-subtitle">{isAdmin ? 'Triage requests from champions and reply back.' : 'Ask for licenses, connectors and AI support — reply here when the team responds.'}</div>
         </div>
         {currentChampion && <button className="btn btn-primary" onClick={() => setShowNew(true)}>➕ New Request</button>}
       </div>
 
       <div className="grid grid-kpi">
-        <KpiCard label="Total" value={requests.length} icon="📨" iconBg="var(--primary-soft)" iconColor="var(--primary)" />
-        <KpiCard label="Open" value={open} icon="📬" iconBg="var(--amber-soft)" iconColor="var(--amber)" />
-        <KpiCard label="In Review" value={inReview} icon="🔎" iconBg="var(--blue-soft)" iconColor="var(--blue)" />
-        <KpiCard label="Completed" value={completed} icon="✅" iconBg="var(--green-soft)" iconColor="var(--green)" />
+        <KpiCard label="Total" value={visibleRequests.length} icon="📨" iconBg="var(--primary-soft)" iconColor="var(--primary)" onClick={() => setStatusFilter('all')} />
+        <KpiCard label="Open" value={open} icon="📬" iconBg="var(--amber-soft)" iconColor="var(--amber)" onClick={() => setStatusFilter(RequestStatus.Open)} />
+        <KpiCard label="In Review" value={inReview} icon="🔎" iconBg="var(--blue-soft)" iconColor="var(--blue)" onClick={() => setStatusFilter(RequestStatus.InReview)} />
+        <KpiCard label="Completed" value={completed} icon="✅" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => setStatusFilter('completed')} />
       </div>
 
       <div className="row mt-24">
@@ -150,14 +183,15 @@ export default function RequestsScreen() {
           <option value="all">All Categories</option>
           {optionsOf(RequestCategoryLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <select className="select" style={{ maxWidth: 200 }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
+        <select className="select" style={{ maxWidth: 200 }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value === 'all' ? 'all' : e.target.value === 'completed' ? 'completed' : Number(e.target.value))}>
           <option value="all">All Status</option>
           {optionsOf(RequestStatusLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          <option value="completed">Completed (Approved / Fulfilled)</option>
         </select>
       </div>
 
       {filtered.length === 0 ? (
-        <Card className="mt-24"><EmptyState icon="📨" title="No requests found" message="Submit a request to get started." /></Card>
+        <Card className="mt-24"><EmptyState icon="📨" title="No requests found" message={isAdmin ? 'No requests have been submitted yet.' : "You haven't submitted any requests yet. Create one to get started."} /></Card>
       ) : (
         <div className="grid grid-cards mt-24">
           {filtered.map((r) => {
@@ -166,7 +200,14 @@ export default function RequestsScreen() {
             const owner = isOwner(r);
             const canOpen = isAdmin || owner;
             return (
-              <div className="card entity-card" key={r.abs_requestid}>
+              <div
+                className={`card entity-card${canOpen ? ' card-clickable' : ''}`}
+                key={r.abs_requestid}
+                role={canOpen ? 'button' : undefined}
+                tabIndex={canOpen ? 0 : undefined}
+                onClick={canOpen ? () => openConvo(r) : undefined}
+                onKeyDown={canOpen ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openConvo(r); } } : undefined}
+              >
                 <div className="ec-head">
                   <Pill color="gray">{RequestCategoryLabel[r.crd49_category]}</Pill>
                   <Pill color={statusColor(r.crd49_status)}>{RequestStatusLabel[r.crd49_status]}</Pill>
@@ -180,7 +221,7 @@ export default function RequestsScreen() {
                   <span className="item-sub">{champ?.crd49_displayname ?? 'Unknown'} · {formatDate(r.crd49_submitteddate)}</span>
                   <span className="spacer" />
                   {canOpen && (
-                    <button className="btn btn-secondary btn-sm" onClick={() => openConvo(r)}>
+                    <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); openConvo(r); }}>
                       {isAdmin ? 'Respond' : 'Reply'}
                     </button>
                   )}
