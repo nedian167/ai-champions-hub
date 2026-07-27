@@ -1238,6 +1238,8 @@ h4 {
 .reports-sub { margin: 4px 0 0; color: var(--text-muted); font-size: 0.9rem; }
 .reports-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .reports-kpi { margin-bottom: 4px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.ec-status { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.ec-last-activity { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
 .section-label {
   font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.04em; color: var(--text-muted); margin: 4px 0 8px;

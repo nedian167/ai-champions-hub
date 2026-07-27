@@ -17,7 +17,7 @@ function statusColor(s?: number): PillColor {
 }
 
 export default function ChampionsScreen() {
-  const { champions, departments, departmentById, pointsFor, isAdmin, reload } = useAppData();
+  const { champions, departments, departmentById, pointsFor, isAdmin, reload, claims } = useAppData();
   const toast = useToast();
   const location = useLocation();
 
@@ -55,6 +55,22 @@ export default function ChampionsScreen() {
       return true;
     });
   }, [champions, search, statusFilter, deptFilter]);
+
+  // Most recent claim date per champion — shown as "last activity" on the card.
+  const lastActivityById = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const cl of claims) {
+      const id = cl._crd49_champion_value;
+      if (!id) continue;
+      const raw = cl.crd49_claimeddate ?? cl.createdon;
+      if (!raw) continue;
+      const t = new Date(raw).getTime();
+      if (isNaN(t)) continue;
+      const prev = map.get(id);
+      if (prev == null || t > prev) map.set(id, t);
+    }
+    return map;
+  }, [claims]);
 
   const active = champions.filter((c) => c.crd49_status === ChampionStatus.Active).length;
   const pending = champions.filter((c) => c.crd49_status === ChampionStatus.Pending).length;
@@ -215,7 +231,14 @@ export default function ChampionsScreen() {
                     <span className="item-sub">{c.abs_userid}</span>
                   </div>
                 </div>
-                <Pill color={statusColor(c.crd49_status)}>{ChampionStatusLabel[c.crd49_status]}</Pill>
+                <div className="ec-status">
+                  <Pill color={statusColor(c.crd49_status)}>{ChampionStatusLabel[c.crd49_status]}</Pill>
+                  <span className="ec-last-activity">
+                    {lastActivityById.has(c.abs_championid)
+                      ? `Last activity ${formatDate(new Date(lastActivityById.get(c.abs_championid)!).toISOString())}`
+                      : 'No activity yet'}
+                  </span>
+                </div>
               </div>
               <div className="meta-row">🏢 {departmentById.get(c._crd49_department_value ?? '')?.abs_name ?? '—'}</div>
               <div className="row">
