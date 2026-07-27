@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
 import { RequestsSvc, bind } from '../data/entities';
 import { Card, KpiCard, Pill, EmptyState, SearchInput, Field } from '../components/ui';
@@ -26,6 +27,8 @@ function statusColor(s?: number): PillColor {
 export default function RequestsScreen() {
   const { requests, championById, currentChampion, currentUser, isAdmin, reload } = useAppData();
   const toast = useToast();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState<number | 'all'>('all');
@@ -100,6 +103,21 @@ export default function RequestsScreen() {
     setConvoStatus(r.crd49_status);
     setMsgText('');
   }
+
+  // Auto-open a request when navigated here from another screen (e.g. Home).
+  const autoOpenedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const targetId = (location.state as { openRequestId?: string } | null)?.openRequestId;
+    if (!targetId || autoOpenedRef.current === targetId) return;
+    const target = requests.find((r) => r.abs_requestid === targetId);
+    if (target && (isAdmin || isOwner(target))) {
+      autoOpenedRef.current = targetId;
+      openConvo(target);
+      // Clear the navigation state so it doesn't re-open on back/refresh.
+      navigate(location.pathname, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location, requests, navigate]);
 
   async function sendMessage() {
     if (!convo) return;
@@ -177,7 +195,14 @@ export default function RequestsScreen() {
             const owner = isOwner(r);
             const canOpen = isAdmin || owner;
             return (
-              <div className="card entity-card" key={r.abs_requestid}>
+              <div
+                className={`card entity-card${canOpen ? ' card-clickable' : ''}`}
+                key={r.abs_requestid}
+                role={canOpen ? 'button' : undefined}
+                tabIndex={canOpen ? 0 : undefined}
+                onClick={canOpen ? () => openConvo(r) : undefined}
+                onKeyDown={canOpen ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openConvo(r); } } : undefined}
+              >
                 <div className="ec-head">
                   <Pill color="gray">{RequestCategoryLabel[r.crd49_category]}</Pill>
                   <Pill color={statusColor(r.crd49_status)}>{RequestStatusLabel[r.crd49_status]}</Pill>
@@ -191,7 +216,7 @@ export default function RequestsScreen() {
                   <span className="item-sub">{champ?.crd49_displayname ?? 'Unknown'} · {formatDate(r.crd49_submitteddate)}</span>
                   <span className="spacer" />
                   {canOpen && (
-                    <button className="btn btn-secondary btn-sm" onClick={() => openConvo(r)}>
+                    <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); openConvo(r); }}>
                       {isAdmin ? 'Respond' : 'Reply'}
                     </button>
                   )}

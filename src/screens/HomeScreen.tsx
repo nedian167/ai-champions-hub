@@ -140,7 +140,16 @@ export default function HomeScreen() {
               {openRequests.slice(0, 5).map((r) => {
                 const champ = championById.get(r._crd49_champion_value ?? '');
                 return (
-                  <div className="list-item" key={r.abs_requestid}>
+                  <div
+                    className="list-item clickable"
+                    key={r.abs_requestid}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => nav('/requests', { state: { openRequestId: r.abs_requestid } })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav('/requests', { state: { openRequestId: r.abs_requestid } }); }
+                    }}
+                  >
                     <div className="center-col spacer">
                       <span className="item-title">{r.abs_title}</span>
                       <span className="item-sub">{champ?.crd49_displayname ?? 'Unknown'}</span>
