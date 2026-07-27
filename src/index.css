@@ -362,6 +362,8 @@ h4 {
 .kpi-value-text {
   display: block;
   font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-muted);
   line-height: 1.25;
   overflow: hidden;
   display: -webkit-box;

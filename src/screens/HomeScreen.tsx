@@ -81,13 +81,14 @@ export default function HomeScreen() {
     return { green, amber, red, total: list.length };
   }, [activeCampaigns, participations, campaignActivities, claims, campaignDepartments, champions]);
 
-  // Trending campaign (admin) — the campaign with the most completed (approved) activities.
+  // Trending campaign — the ACTIVE campaign with the most completed (approved) activities.
   const trending = useMemo(() => {
+    const liveIds = new Set(activeCampaigns.map((c) => c.abs_campaignid));
     const counts = new Map<string, number>();
     for (const cl of claims) {
       if (cl.crd49_status !== ClaimStatus.Approved) continue;
       const id = cl._crd49_campaign_value;
-      if (!id) continue;
+      if (!id || !liveIds.has(id)) continue;
       counts.set(id, (counts.get(id) ?? 0) + 1);
     }
     let bestId: string | null = null;
@@ -99,7 +100,7 @@ export default function HomeScreen() {
     const campaign = campaigns.find((c) => c.abs_campaignid === bestId);
     if (!campaign) return null;
     return { id: bestId, name: campaign.abs_name ?? 'Untitled', count: bestCount };
-  }, [claims, campaigns]);
+  }, [claims, campaigns, activeCampaigns]);
 
   const topChampions = useMemo(
     () =>
@@ -173,6 +174,17 @@ export default function HomeScreen() {
             iconBg="var(--blue-soft)"
             iconColor="var(--blue)"
             onClick={() => nav('/campaigns')}
+          />
+          <KpiCard
+            label="Trending Campaign"
+            value={<span className="kpi-value-text">{trending ? trending.name : '—'}</span>}
+            sub={trending
+              ? `${trending.count} ${trending.count === 1 ? 'activity' : 'activities'} completed`
+              : 'No completed activities yet'}
+            icon="🔥"
+            iconBg="var(--amber-soft)"
+            iconColor="var(--amber)"
+            onClick={trending ? () => nav(`/campaigns/${trending.id}`) : undefined}
           />
         </div>
       ) : (
