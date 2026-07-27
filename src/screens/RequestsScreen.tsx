@@ -38,26 +38,37 @@ export default function RequestsScreen() {
 
   const [form, setForm] = useState({ title: '', category: RequestCategory.License as number, description: '' });
 
-  const isOwner = (r: Abs_requests) =>
-    !!currentChampion && r._crd49_champion_value === currentChampion.abs_championid;
+  const myUpn = (currentUser?.userPrincipalName ?? '').toLowerCase();
+  const isOwner = (r: Abs_requests) => {
+    if (currentChampion && r._crd49_champion_value === currentChampion.abs_championid) return true;
+    const champ = championById.get(r._crd49_champion_value ?? '');
+    return !!myUpn && (champ?.abs_userid ?? '').toLowerCase() === myUpn;
+  };
 
   const myName = currentUser?.fullName
     || currentChampion?.crd49_displayname
     || (isAdmin ? 'Administrator' : 'Requester');
 
+  // Admins triage every request; a champion only sees and manages their own.
+  const visibleRequests = useMemo(
+    () => (isAdmin ? requests : requests.filter(isOwner)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [requests, isAdmin, currentChampion, myUpn, championById],
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return requests.filter((r) => {
+    return visibleRequests.filter((r) => {
       if (catFilter !== 'all' && r.crd49_category !== catFilter) return false;
       if (statusFilter !== 'all' && r.crd49_status !== statusFilter) return false;
       if (q && !`${r.abs_title ?? ''} ${r.crd49_description ?? ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [requests, search, catFilter, statusFilter]);
+  }, [visibleRequests, search, catFilter, statusFilter]);
 
-  const open = requests.filter((r) => r.crd49_status === RequestStatus.Open).length;
-  const inReview = requests.filter((r) => r.crd49_status === RequestStatus.InReview).length;
-  const completed = requests.filter((r) => r.crd49_status === RequestStatus.Approved || r.crd49_status === RequestStatus.Fulfilled).length;
+  const open = visibleRequests.filter((r) => r.crd49_status === RequestStatus.Open).length;
+  const inReview = visibleRequests.filter((r) => r.crd49_status === RequestStatus.InReview).length;
+  const completed = visibleRequests.filter((r) => r.crd49_status === RequestStatus.Approved || r.crd49_status === RequestStatus.Fulfilled).length;
 
   async function createRequest() {
     if (!currentChampion) { toast.error('No champion record found for you.'); return; }
@@ -132,13 +143,13 @@ export default function RequestsScreen() {
       <div className="page-header">
         <div>
           <h1>Requests</h1>
-          <div className="page-subtitle">Ask for licenses, connectors and AI support.</div>
+          <div className="page-subtitle">{isAdmin ? 'Triage requests from champions and reply back.' : 'Ask for licenses, connectors and AI support — reply here when the team responds.'}</div>
         </div>
         {currentChampion && <button className="btn btn-primary" onClick={() => setShowNew(true)}>➕ New Request</button>}
       </div>
 
       <div className="grid grid-kpi">
-        <KpiCard label="Total" value={requests.length} icon="📨" iconBg="var(--primary-soft)" iconColor="var(--primary)" />
+        <KpiCard label="Total" value={visibleRequests.length} icon="📨" iconBg="var(--primary-soft)" iconColor="var(--primary)" />
         <KpiCard label="Open" value={open} icon="📬" iconBg="var(--amber-soft)" iconColor="var(--amber)" />
         <KpiCard label="In Review" value={inReview} icon="🔎" iconBg="var(--blue-soft)" iconColor="var(--blue)" />
         <KpiCard label="Completed" value={completed} icon="✅" iconBg="var(--green-soft)" iconColor="var(--green)" />
@@ -157,7 +168,7 @@ export default function RequestsScreen() {
       </div>
 
       {filtered.length === 0 ? (
-        <Card className="mt-24"><EmptyState icon="📨" title="No requests found" message="Submit a request to get started." /></Card>
+        <Card className="mt-24"><EmptyState icon="📨" title="No requests found" message={isAdmin ? 'No requests have been submitted yet.' : "You haven't submitted any requests yet. Create one to get started."} /></Card>
       ) : (
         <div className="grid grid-cards mt-24">
           {filtered.map((r) => {
