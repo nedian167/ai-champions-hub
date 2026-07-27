@@ -12,6 +12,7 @@ import ActivitiesScreen from './screens/ActivitiesScreen';
 import EventsScreen from './screens/EventsScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import RequestsScreen from './screens/RequestsScreen';
+import ReportsScreen from './screens/ReportsScreen';
 import CustomizeScreen from './screens/CustomizeScreen';
 import SettingsScreen from './screens/SettingsScreen';
 
@@ -68,6 +69,7 @@ function Shell() {
             <Route path="/events" element={<EventsScreen />} />
             <Route path="/leaderboard" element={<LeaderboardScreen />} />
             <Route path="/requests" element={<RequestsScreen />} />
+            <Route path="/reports" element={<ReportsScreen />} />
             <Route path="/customize" element={<CustomizeScreen />} />
             <Route path="/settings" element={<SettingsScreen />} />
             <Route path="*" element={<Navigate to="/" replace />} />

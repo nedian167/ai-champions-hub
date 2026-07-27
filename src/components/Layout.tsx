@@ -2,7 +2,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
 import { Avatar } from './ui';
 
-const NAV: { to: string; label: string; icon: string }[] = [
+const NAV: { to: string; label: string; icon: string; adminOnly?: boolean }[] = [
   { to: '/', label: 'Home', icon: '🏠' },
   { to: '/champions', label: 'Champions', icon: '🧑\u200d🚀' },
   { to: '/campaigns', label: 'Campaigns', icon: '📣' },
@@ -10,6 +10,7 @@ const NAV: { to: string; label: string; icon: string }[] = [
   { to: '/events', label: 'Events', icon: '📅' },
   { to: '/leaderboard', label: 'Leaderboard', icon: '🏆' },
   { to: '/requests', label: 'Requests', icon: '📨' },
+  { to: '/reports', label: 'Reports', icon: '📊', adminOnly: true },
   { to: '/customize', label: 'Customize', icon: '🎨' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
@@ -22,6 +23,7 @@ const TITLES: Record<string, string> = {
   '/events': 'Events',
   '/leaderboard': 'Leaderboard',
   '/requests': 'Requests',
+  '/reports': 'Reports',
   '/customize': 'Customize',
   '/settings': 'Settings',
 };
@@ -38,12 +40,13 @@ function CommunityButton() {
 }
 
 export default function Layout() {
-  const { currentUser, currentChampion, isProgramManager, isAppAdmin } = useAppData();
+  const { currentUser, currentChampion, isProgramManager, isAppAdmin, isAdmin } = useAppData();
   const loc = useLocation();
   const base = '/' + (loc.pathname.split('/')[1] ?? '');
   const title = TITLES[base] ?? 'AI Champions Hub';
   const name = currentChampion?.crd49_displayname || currentUser?.fullName || 'Guest';
   const role = isProgramManager ? 'Program Manager' : isAppAdmin ? 'App Admin' : 'Champion';
+  const navItems = NAV.filter((n) => !n.adminOnly || isAdmin);
 
   return (
     <div className="app-shell">
@@ -53,7 +56,7 @@ export default function Layout() {
           <span>AI Champions Hub</span>
         </div>
         <nav className="sidebar-nav">
-          {NAV.map((n) => (
+          {navItems.map((n) => (
             <NavLink
               key={n.to}
               to={n.to}
