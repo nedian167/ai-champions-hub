@@ -8,6 +8,7 @@ import {
   RequestCategory, RequestCategoryLabel, RequestStatus, RequestStatusLabel, optionsOf,
 } from '../lib/enums';
 import { formatDate } from '../lib/format';
+import { parseThread, serializeThread, lastMessage, type ThreadMessage } from '../lib/requestThread';
 import type { PillColor } from '../components/ui';
 import type { Abs_requests } from '../data/entities';
 
@@ -23,18 +24,26 @@ function statusColor(s?: number): PillColor {
 }
 
 export default function RequestsScreen() {
-  const { requests, championById, currentChampion, isAdmin, reload } = useAppData();
+  const { requests, championById, currentChampion, currentUser, isAdmin, reload } = useAppData();
   const toast = useToast();
 
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState<number | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<number | 'all'>('all');
   const [showNew, setShowNew] = useState(false);
-  const [triage, setTriage] = useState<Abs_requests | null>(null);
+  const [convo, setConvo] = useState<Abs_requests | null>(null);
+  const [convoStatus, setConvoStatus] = useState<number>(RequestStatus.Open);
+  const [msgText, setMsgText] = useState('');
   const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({ title: '', category: RequestCategory.License as number, description: '' });
-  const [triageForm, setTriageForm] = useState({ status: RequestStatus.Open as number, response: '' });
+
+  const isOwner = (r: Abs_requests) =>
+    !!currentChampion && r._crd49_champion_value === currentChampion.abs_championid;
+
+  const myName = currentUser?.fullName
+    || currentChampion?.crd49_displayname
+    || (isAdmin ? 'Administrator' : 'Requester');
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -75,20 +84,44 @@ export default function RequestsScreen() {
     }
   }
 
-  async function saveTriage() {
-    if (!triage) return;
+  function openConvo(r: Abs_requests) {
+    setConvo(r);
+    setConvoStatus(r.crd49_status);
+    setMsgText('');
+  }
+
+  async function sendMessage() {
+    if (!convo) return;
+    const admin = isAdmin;
+    const text = msgText.trim();
+    if (!text && !admin) { toast.error('Enter a message before sending.'); return; }
+
+    const messages = parseThread(convo.crd49_response);
+    if (text) {
+      const msg: ThreadMessage = {
+        by: admin ? 'admin' : 'requester',
+        name: myName,
+        text,
+        at: new Date().toISOString(),
+      };
+      messages.push(msg);
+    }
+
     setSaving(true);
     try {
-      const res = await RequestsSvc.update(triage.abs_requestid, {
-        crd49_status: triageForm.status,
-        crd49_response: triageForm.response.trim() || undefined,
-      } as never);
+      const payload: Record<string, unknown> = {};
+      if (messages.length) payload.crd49_response = serializeThread(messages);
+      if (admin) payload.crd49_status = convoStatus;
+      if (!Object.keys(payload).length) { setConvo(null); return; }
+
+      const res = await RequestsSvc.update(convo.abs_requestid, payload as never);
       if (!res.success) throw new Error(res.error?.message ?? 'Update failed');
-      toast.success('Request updated.');
-      setTriage(null);
+      toast.success(admin ? 'Request updated.' : 'Reply sent.');
+      setConvo(null);
+      setMsgText('');
       await reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to update request.');
+      toast.error(e instanceof Error ? e.message : 'Failed to send message.');
     } finally {
       setSaving(false);
     }
@@ -129,6 +162,9 @@ export default function RequestsScreen() {
         <div className="grid grid-cards mt-24">
           {filtered.map((r) => {
             const champ = championById.get(r._crd49_champion_value ?? '');
+            const last = lastMessage(r.crd49_response);
+            const owner = isOwner(r);
+            const canOpen = isAdmin || owner;
             return (
               <div className="card entity-card" key={r.abs_requestid}>
                 <div className="ec-head">
@@ -137,12 +173,16 @@ export default function RequestsScreen() {
                 </div>
                 <h3>{r.abs_title}</h3>
                 <p className="entity-desc">{r.crd49_description}</p>
-                {r.crd49_response && <div className="item-sub">💬 {r.crd49_response}</div>}
+                {last && (
+                  <div className="item-sub">💬 <strong>{last.name}:</strong> {last.text}</div>
+                )}
                 <div className="row">
                   <span className="item-sub">{champ?.crd49_displayname ?? 'Unknown'} · {formatDate(r.crd49_submitteddate)}</span>
                   <span className="spacer" />
-                  {isAdmin && (
-                    <button className="btn btn-secondary btn-sm" onClick={() => { setTriage(r); setTriageForm({ status: r.crd49_status, response: r.crd49_response ?? '' }); }}>Triage</button>
+                  {canOpen && (
+                    <button className="btn btn-secondary btn-sm" onClick={() => openConvo(r)}>
+                      {isAdmin ? 'Respond' : 'Reply'}
+                    </button>
                   )}
                 </div>
               </div>
@@ -172,28 +212,62 @@ export default function RequestsScreen() {
         </Modal>
       )}
 
-      {triage && (
-        <Modal
-          title="Triage Request"
-          onClose={() => setTriage(null)}
-          footer={
-            <>
-              <button className="btn btn-secondary" onClick={() => setTriage(null)}>Cancel</button>
-              <button className="btn btn-primary" disabled={saving} onClick={saveTriage}>{saving ? 'Saving…' : 'Save'}</button>
-            </>
-          }
-        >
-          <div className="item-title">{triage.abs_title}</div>
-          <p className="text-muted">{triage.crd49_description}</p>
-          <div className="divider" />
-          <Field label="Status">
-            <select className="select" value={triageForm.status} onChange={(e) => setTriageForm({ ...triageForm, status: Number(e.target.value) })}>
-              {optionsOf(RequestStatusLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </Field>
-          <Field label="Response"><textarea className="textarea" value={triageForm.response} onChange={(e) => setTriageForm({ ...triageForm, response: e.target.value })} placeholder="Reply to the requester…" /></Field>
-        </Modal>
-      )}
+      {convo && (() => {
+        const champ = championById.get(convo._crd49_champion_value ?? '');
+        const requesterName = champ?.crd49_displayname ?? 'Requester';
+        const thread = parseThread(convo.crd49_response);
+        return (
+          <Modal
+            title={isAdmin ? 'Respond to Request' : 'Conversation'}
+            onClose={() => setConvo(null)}
+            footer={
+              <>
+                <button className="btn btn-secondary" onClick={() => setConvo(null)}>Close</button>
+                <button className="btn btn-primary" disabled={saving} onClick={sendMessage}>
+                  {saving ? 'Sending…' : isAdmin ? 'Send / Update' : 'Send Reply'}
+                </button>
+              </>
+            }
+          >
+            <div className="row" style={{ gap: 8, marginBottom: 4 }}>
+              <Pill color="gray">{RequestCategoryLabel[convo.crd49_category]}</Pill>
+              <Pill color={statusColor(convo.crd49_status)}>{RequestStatusLabel[convo.crd49_status]}</Pill>
+            </div>
+            <div className="item-title">{convo.abs_title}</div>
+
+            <div className="thread">
+              <div className="msg msg-requester">
+                <div className="msg-meta">{requesterName} · {formatDate(convo.crd49_submitteddate)}</div>
+                <div className="msg-body">{convo.crd49_description}</div>
+              </div>
+              {thread.map((m, i) => (
+                <div key={i} className={`msg ${m.by === 'admin' ? 'msg-admin' : 'msg-requester'}`}>
+                  <div className="msg-meta">{m.name}{m.at ? ` · ${formatDate(m.at)}` : ''}</div>
+                  <div className="msg-body">{m.text}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="divider" />
+            {isAdmin && (
+              <Field label="Status">
+                <select className="select" value={convoStatus} onChange={(e) => setConvoStatus(Number(e.target.value))}>
+                  {optionsOf(RequestStatusLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+            )}
+            <Field label={isAdmin ? 'Reply message' : 'Your reply'}>
+              <textarea
+                className="textarea"
+                value={msgText}
+                onChange={(e) => setMsgText(e.target.value)}
+                placeholder={isAdmin ? 'Write a reply to the requester…' : 'Reply to the program team…'}
+              />
+            </Field>
+            {isAdmin && <div className="text-muted" style={{ fontSize: 12 }}>You can update status without adding a message.</div>}
+          </Modal>
+        );
+      })()}
     </>
   );
 }

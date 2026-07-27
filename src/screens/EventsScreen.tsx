@@ -24,6 +24,17 @@ export default function EventsScreen() {
   const online = events.filter((e) => e.crd49_format === EventFormat.Online).length;
   const inPerson = events.filter((e) => e.crd49_format === EventFormat.InPerson).length;
 
+  const [detail, setDetail] = useState<null | 'all' | 'online' | 'inperson'>(null);
+  const detailEvents = useMemo(() => {
+    const list = detail === 'online'
+      ? events.filter((e) => e.crd49_format === EventFormat.Online)
+      : detail === 'inperson'
+        ? events.filter((e) => e.crd49_format === EventFormat.InPerson)
+        : events;
+    return [...list].sort((a, b) => (a.crd49_eventdate ?? '').localeCompare(b.crd49_eventdate ?? ''));
+  }, [detail, events]);
+  const detailTitle = detail === 'online' ? 'Online Events' : detail === 'inperson' ? 'In-Person Events' : 'All Events';
+
   const upcoming = useMemo(
     () => [...events]
       .filter((e) => new Date(e.crd49_eventdate).getTime() >= Date.now() - 864e5)
@@ -91,9 +102,9 @@ export default function EventsScreen() {
       </div>
 
       <div className="grid grid-kpi">
-        <KpiCard label="Total Events" value={events.length} icon="📅" iconBg="var(--blue-soft)" iconColor="var(--blue)" />
-        <KpiCard label="Online" value={online} icon="💻" iconBg="var(--green-soft)" iconColor="var(--green)" />
-        <KpiCard label="In-Person" value={inPerson} icon="📍" iconBg="var(--purple-soft)" iconColor="var(--purple)" />
+        <KpiCard label="Total Events" value={events.length} icon="📅" iconBg="var(--blue-soft)" iconColor="var(--blue)" onClick={() => setDetail('all')} />
+        <KpiCard label="Online" value={online} icon="💻" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => setDetail('online')} />
+        <KpiCard label="In-Person" value={inPerson} icon="📍" iconBg="var(--purple-soft)" iconColor="var(--purple)" onClick={() => setDetail('inperson')} />
       </div>
 
       <div className="grid grid-2 mt-24">
@@ -175,6 +186,33 @@ export default function EventsScreen() {
             <Field label="Location"><input className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Room / address" /></Field>
             <Field label="Meeting link"><input className="input" value={form.meetinglink} onChange={(e) => setForm({ ...form, meetinglink: e.target.value })} placeholder="https://teams…" /></Field>
           </div>
+        </Modal>
+      )}
+      {detail && (
+        <Modal title={`${detailTitle} (${detailEvents.length})`} wide onClose={() => setDetail(null)}>
+          {detailEvents.length === 0 ? (
+            <EmptyState icon="📅" title="No events" message="Nothing to show in this category yet." />
+          ) : (
+            <div className="list">
+              {detailEvents.map((e) => (
+                <div className="list-item" key={e.abs_eventid}>
+                  <div className="center-col spacer">
+                    <span className="item-title">{e.abs_name}</span>
+                    <span className="item-sub">
+                      {formatDate(e.crd49_eventdate)}
+                      {e.crd49_location ? ` · ${e.crd49_location}` : ''}
+                      {e.crd49_meetinglink ? ' · ' : ''}
+                      {e.crd49_meetinglink && (
+                        <a href={e.crd49_meetinglink} target="_blank" rel="noreferrer" className="link">Join link</a>
+                      )}
+                    </span>
+                    {e.crd49_description && <span className="item-sub">{e.crd49_description}</span>}
+                  </div>
+                  <Pill color={e.crd49_format === EventFormat.Online ? 'green' : 'purple'}>{EventFormatLabel[e.crd49_format]}</Pill>
+                </div>
+              ))}
+            </div>
+          )}
         </Modal>
       )}
     </>
