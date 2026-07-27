@@ -73,8 +73,19 @@ export default function SettingsScreen() {
     return null;
   }
 
+  const credit = (
+    <div className="settings-credit">
+      Developed by: Zafar Ul Islam (<a href="mailto:zafaru@microsoft.com">zafaru@microsoft.com</a>)
+    </div>
+  );
+
   if (!isAdmin) {
-    return <Card><EmptyState icon="🔒" title="Admins only" message="Program settings are available to Program Managers and App Admins." /></Card>;
+    return (
+      <>
+        <Card><EmptyState icon="🔒" title="Admins only" message="Program settings are available to Program Managers and App Admins." /></Card>
+        {credit}
+      </>
+    );
   }
 
   async function saveConfig() {
@@ -323,6 +334,8 @@ export default function SettingsScreen() {
           <Field label="Name"><input className="input" value={deptModal.name} onChange={(e) => setDeptModal({ ...deptModal, name: e.target.value })} autoFocus /></Field>
         </Modal>
       )}
+
+      {credit}
     </>
   );
 }

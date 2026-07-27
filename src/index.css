@@ -1103,6 +1103,17 @@ h4 {
 }
 
 /* ---------- Misc ---------- */
+.settings-credit {
+  margin-top: 24px;
+  padding-top: 16px;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-faint);
+  border-top: 1px solid var(--border);
+}
+.settings-credit a {
+  color: inherit;
+}
 .loading-screen {
   display: grid;
   place-items: center;
