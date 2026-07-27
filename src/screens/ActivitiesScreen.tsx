@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
 import {
   ActivitiesSvc, ActivityClaimsSvc, ClaimEvidencesSvc, ChampionsSvc, bind,
@@ -26,9 +27,18 @@ export default function ActivitiesScreen() {
     championById, activityById, campaignById, pointsFor,
   } = useAppData();
   const toast = useToast();
+  const location = useLocation();
 
-  const [tab, setTab] = useState<Tab>('activities');
+  const [tab, setTab] = useState<Tab>(
+    () => ((location.state as { tab?: Tab } | null)?.tab === 'claims' ? 'claims' : 'activities'),
+  );
   const [typeFilter, setTypeFilter] = useState<number | 'all'>('all');
+  const [claimStatusFilter, setClaimStatusFilter] = useState<number | 'all'>(
+    () => {
+      const s = (location.state as { claimStatus?: number } | null)?.claimStatus;
+      return typeof s === 'number' ? s : 'all';
+    },
+  );
   const [showNew, setShowNew] = useState(false);
   const [claimFor, setClaimFor] = useState<Abs_activities | null>(null);
   const [saving, setSaving] = useState(false);
@@ -49,7 +59,13 @@ export default function ActivitiesScreen() {
   );
 
   const shownActivities = activities.filter((a) => typeFilter === 'all' || a.crd49_activitytype === typeFilter);
-  const shownClaims = isAdmin ? claims : myClaims;
+  const allClaims = isAdmin ? claims : myClaims;
+  const shownClaims = allClaims.filter((c) => claimStatusFilter === 'all' || c.crd49_status === claimStatusFilter);
+
+  function goClaims(status: number | 'all') {
+    setClaimStatusFilter(status);
+    setTab('claims');
+  }
 
   async function createActivity() {
     if (!newForm.title.trim()) { toast.error('Title is required.'); return; }
@@ -156,13 +172,13 @@ export default function ActivitiesScreen() {
       </div>
 
       <div className="grid grid-kpi">
-        <KpiCard label="Your Points" value={myPoints} icon="⭐" iconBg="var(--amber-soft)" iconColor="var(--amber)" />
-        <KpiCard label="Your Completed" value={myClaims.filter((c) => c.crd49_status === ClaimStatus.Approved).length} icon="✅" iconBg="var(--green-soft)" iconColor="var(--green)" />
-        <KpiCard label="Your Pending" value={myClaims.filter((c) => c.crd49_status === ClaimStatus.Pending).length} icon="⏳" iconBg="var(--amber-soft)" iconColor="var(--amber)" />
-        <KpiCard label="Total Activities" value={activities.length} icon="🎯" iconBg="var(--blue-soft)" iconColor="var(--blue)" />
-        <KpiCard label="Total Points" value={totalPoints} icon="💯" iconBg="var(--primary-soft)" iconColor="var(--primary)" />
-        <KpiCard label="Pending Claims" value={pendingClaims.length} icon="📥" iconBg="var(--purple-soft)" iconColor="var(--purple)" />
-        <KpiCard label="Approved Claims" value={approvedClaims.length} icon="🏅" iconBg="var(--green-soft)" iconColor="var(--green)" />
+        <KpiCard label="Your Points" value={myPoints} icon="⭐" iconBg="var(--amber-soft)" iconColor="var(--amber)" onClick={() => goClaims(ClaimStatus.Approved)} />
+        <KpiCard label="Your Completed" value={myClaims.filter((c) => c.crd49_status === ClaimStatus.Approved).length} icon="✅" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => goClaims(ClaimStatus.Approved)} />
+        <KpiCard label="Your Pending" value={myClaims.filter((c) => c.crd49_status === ClaimStatus.Pending).length} icon="⏳" iconBg="var(--amber-soft)" iconColor="var(--amber)" onClick={() => goClaims(ClaimStatus.Pending)} />
+        <KpiCard label="Total Activities" value={activities.length} icon="🎯" iconBg="var(--blue-soft)" iconColor="var(--blue)" onClick={() => setTab('activities')} />
+        <KpiCard label="Total Points" value={totalPoints} icon="💯" iconBg="var(--primary-soft)" iconColor="var(--primary)" onClick={() => goClaims(ClaimStatus.Approved)} />
+        <KpiCard label="Pending Claims" value={pendingClaims.length} icon="📥" iconBg="var(--purple-soft)" iconColor="var(--purple)" onClick={() => goClaims(ClaimStatus.Pending)} />
+        <KpiCard label="Approved Claims" value={approvedClaims.length} icon="🏅" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => goClaims(ClaimStatus.Approved)} />
       </div>
 
       <div className="mt-24">
@@ -171,7 +187,7 @@ export default function ActivitiesScreen() {
           onChange={setTab}
           tabs={[
             { key: 'activities', label: `Activities (${activities.length})` },
-            { key: 'claims', label: `Claims (${shownClaims.length})` },
+            { key: 'claims', label: `Claims (${allClaims.length})` },
           ]}
         />
       </div>
@@ -219,6 +235,12 @@ export default function ActivitiesScreen() {
 
       {tab === 'claims' && (
         <Card>
+          <div className="row" style={{ marginBottom: 16 }}>
+            <select className="select" style={{ maxWidth: 220 }} value={claimStatusFilter} onChange={(e) => setClaimStatusFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
+              <option value="all">All Claim Status</option>
+              {optionsOf(ClaimStatusLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
           {shownClaims.length === 0 ? (
             <EmptyState icon="📥" title="No claims yet" message="Claim an activity to see it here." />
           ) : (

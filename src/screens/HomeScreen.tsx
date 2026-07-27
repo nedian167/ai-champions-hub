@@ -80,6 +80,7 @@ export default function HomeScreen() {
           iconBg="var(--purple-soft)"
           iconColor="var(--purple)"
           delta={monthDelta(champions)}
+          onClick={() => nav('/champions', { state: { statusFilter: ChampionStatus.Active } })}
         />
         <KpiCard
           label="Active Campaigns"
@@ -89,6 +90,7 @@ export default function HomeScreen() {
           iconBg="var(--blue-soft)"
           iconColor="var(--blue)"
           delta={monthDelta(campaigns)}
+          onClick={() => nav('/campaigns', { state: { tab: 'active' } })}
         />
         <KpiCard
           label="Activities Completed"
@@ -98,6 +100,7 @@ export default function HomeScreen() {
           iconBg="var(--green-soft)"
           iconColor="var(--green)"
           delta={monthDelta(approvedClaims)}
+          onClick={() => nav('/activities', { state: { tab: 'claims', claimStatus: ClaimStatus.Approved } })}
         />
         <KpiCard
           label="Total Points Earned"
@@ -106,6 +109,7 @@ export default function HomeScreen() {
           icon="⭐"
           iconBg="var(--amber-soft)"
           iconColor="var(--amber)"
+          onClick={() => nav('/leaderboard')}
         />
       </div>
 

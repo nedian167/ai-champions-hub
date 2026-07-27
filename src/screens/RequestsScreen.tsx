@@ -32,7 +32,7 @@ export default function RequestsScreen() {
 
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState<number | 'all'>('all');
-  const [statusFilter, setStatusFilter] = useState<number | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<number | 'all' | 'completed'>('all');
   const [showNew, setShowNew] = useState(false);
   const [convo, setConvo] = useState<Abs_requests | null>(null);
   const [convoStatus, setConvoStatus] = useState<number>(RequestStatus.Open);
@@ -63,7 +63,11 @@ export default function RequestsScreen() {
     const q = search.trim().toLowerCase();
     return visibleRequests.filter((r) => {
       if (catFilter !== 'all' && r.crd49_category !== catFilter) return false;
-      if (statusFilter !== 'all' && r.crd49_status !== statusFilter) return false;
+      if (statusFilter === 'completed') {
+        if (r.crd49_status !== RequestStatus.Approved && r.crd49_status !== RequestStatus.Fulfilled) return false;
+      } else if (statusFilter !== 'all' && r.crd49_status !== statusFilter) {
+        return false;
+      }
       if (q && !`${r.abs_title ?? ''} ${r.crd49_description ?? ''}`.toLowerCase().includes(q)) return false;
       return true;
     });
@@ -167,10 +171,10 @@ export default function RequestsScreen() {
       </div>
 
       <div className="grid grid-kpi">
-        <KpiCard label="Total" value={visibleRequests.length} icon="📨" iconBg="var(--primary-soft)" iconColor="var(--primary)" />
-        <KpiCard label="Open" value={open} icon="📬" iconBg="var(--amber-soft)" iconColor="var(--amber)" />
-        <KpiCard label="In Review" value={inReview} icon="🔎" iconBg="var(--blue-soft)" iconColor="var(--blue)" />
-        <KpiCard label="Completed" value={completed} icon="✅" iconBg="var(--green-soft)" iconColor="var(--green)" />
+        <KpiCard label="Total" value={visibleRequests.length} icon="📨" iconBg="var(--primary-soft)" iconColor="var(--primary)" onClick={() => setStatusFilter('all')} />
+        <KpiCard label="Open" value={open} icon="📬" iconBg="var(--amber-soft)" iconColor="var(--amber)" onClick={() => setStatusFilter(RequestStatus.Open)} />
+        <KpiCard label="In Review" value={inReview} icon="🔎" iconBg="var(--blue-soft)" iconColor="var(--blue)" onClick={() => setStatusFilter(RequestStatus.InReview)} />
+        <KpiCard label="Completed" value={completed} icon="✅" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => setStatusFilter('completed')} />
       </div>
 
       <div className="row mt-24">
@@ -179,9 +183,10 @@ export default function RequestsScreen() {
           <option value="all">All Categories</option>
           {optionsOf(RequestCategoryLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-        <select className="select" style={{ maxWidth: 200 }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
+        <select className="select" style={{ maxWidth: 200 }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value === 'all' ? 'all' : e.target.value === 'completed' ? 'completed' : Number(e.target.value))}>
           <option value="all">All Status</option>
           {optionsOf(RequestStatusLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          <option value="completed">Completed (Approved / Fulfilled)</option>
         </select>
       </div>
 

@@ -155,9 +155,9 @@ export default function CampaignDetailScreen() {
       )}
 
       <div className="grid grid-kpi">
-        <KpiCard label="Activities" value={acts.length} icon="🎯" iconBg="var(--green-soft)" iconColor="var(--green)" />
-        <KpiCard label="Participants" value={parts.length} icon="👥" iconBg="var(--purple-soft)" iconColor="var(--purple)" />
-        <KpiCard label="Events" value={camEvents.length} icon="📅" iconBg="var(--blue-soft)" iconColor="var(--blue)" />
+        <KpiCard label="Activities" value={acts.length} icon="🎯" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => setTab('activities')} />
+        <KpiCard label="Participants" value={parts.length} icon="👥" iconBg="var(--purple-soft)" iconColor="var(--purple)" onClick={() => setTab('participants')} />
+        <KpiCard label="Events" value={camEvents.length} icon="📅" iconBg="var(--blue-soft)" iconColor="var(--blue)" onClick={() => setTab('events')} />
       </div>
 
       <div className="grid grid-2 mt-24">
