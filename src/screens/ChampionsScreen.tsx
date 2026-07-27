@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { ChampionsSvc, bind, type Abs_champions } from '../data/entities';
 import { Card, KpiCard, Pill, Avatar, EmptyState, SearchInput, Field } from '../components/ui';
+import { PeoplePicker } from '../components/PeoplePicker';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import {
@@ -15,7 +16,7 @@ function statusColor(s?: number): PillColor {
 }
 
 export default function ChampionsScreen() {
-  const { champions, departments, departmentById, pointsFor, isAdmin, reload, currentUser } = useAppData();
+  const { champions, departments, departmentById, pointsFor, isAdmin, reload } = useAppData();
   const toast = useToast();
 
   const [search, setSearch] = useState('');
@@ -50,6 +51,17 @@ export default function ChampionsScreen() {
 
   const active = champions.filter((c) => c.crd49_status === ChampionStatus.Active).length;
   const pending = champions.filter((c) => c.crd49_status === ChampionStatus.Pending).length;
+
+  const deptIdByName = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const d of departments) if (d.abs_name) m.set(d.abs_name.trim().toLowerCase(), d.abs_departmentid);
+    return m;
+  }, [departments]);
+
+  function matchDept(name?: string): string {
+    if (!name) return '';
+    return deptIdByName.get(name.trim().toLowerCase()) ?? '';
+  }
 
   async function addChampion() {
     if (!form.displayname.trim() || !form.userid.trim() || !form.department) {
@@ -240,12 +252,27 @@ export default function ChampionsScreen() {
             </>
           }
         >
-          <Field label="Display name">
-            <input className="input" value={form.displayname} onChange={(e) => setForm({ ...form, displayname: e.target.value })} placeholder="Ada Lovelace" />
+          <Field label="Find person in directory (GAL)" help="Search the Microsoft 365 address list — selecting a person fills in their name and User ID.">
+            <PeoplePicker
+              value={form.displayname || form.userid ? { displayName: form.displayname, userId: form.userid } : null}
+              onChange={(p) =>
+                setForm({
+                  ...form,
+                  displayname: p?.displayName ?? '',
+                  userid: p?.userId ?? '',
+                  department: p?.department ? (matchDept(p.department) || form.department) : form.department,
+                })
+              }
+            />
           </Field>
-          <Field label="User ID (email / UPN)" help={currentUser ? undefined : 'Tip: use the champion\'s work email.'}>
-            <input className="input" value={form.userid} onChange={(e) => setForm({ ...form, userid: e.target.value })} placeholder="ada@contoso.com" />
-          </Field>
+          <div className="field-row">
+            <Field label="Display name">
+              <input className="input" value={form.displayname} onChange={(e) => setForm({ ...form, displayname: e.target.value })} placeholder="Ada Lovelace" />
+            </Field>
+            <Field label="User ID (email / UPN)">
+              <input className="input" value={form.userid} onChange={(e) => setForm({ ...form, userid: e.target.value })} placeholder="ada@contoso.com" />
+            </Field>
+          </div>
           <div className="field-row">
             <Field label="Department">
               <select className="select" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })}>
@@ -279,12 +306,27 @@ export default function ChampionsScreen() {
             </>
           }
         >
-          <Field label="Display name">
-            <input className="input" value={editForm.displayname} onChange={(e) => setEditForm({ ...editForm, displayname: e.target.value })} placeholder="Ada Lovelace" />
+          <Field label="Find person in directory (GAL)" help="Search the Microsoft 365 address list to update this champion's identity.">
+            <PeoplePicker
+              value={editForm.displayname || editForm.userid ? { displayName: editForm.displayname, userId: editForm.userid } : null}
+              onChange={(p) =>
+                setEditForm({
+                  ...editForm,
+                  displayname: p?.displayName ?? '',
+                  userid: p?.userId ?? '',
+                  department: p?.department ? (matchDept(p.department) || editForm.department) : editForm.department,
+                })
+              }
+            />
           </Field>
-          <Field label="User ID (email / UPN)">
-            <input className="input" value={editForm.userid} onChange={(e) => setEditForm({ ...editForm, userid: e.target.value })} placeholder="ada@contoso.com" />
-          </Field>
+          <div className="field-row">
+            <Field label="Display name">
+              <input className="input" value={editForm.displayname} onChange={(e) => setEditForm({ ...editForm, displayname: e.target.value })} placeholder="Ada Lovelace" />
+            </Field>
+            <Field label="User ID (email / UPN)">
+              <input className="input" value={editForm.userid} onChange={(e) => setEditForm({ ...editForm, userid: e.target.value })} placeholder="ada@contoso.com" />
+            </Field>
+          </div>
           <div className="field-row">
             <Field label="Department">
               <select className="select" value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}>
