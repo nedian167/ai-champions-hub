@@ -14,6 +14,7 @@ export const Abs_programsettingsesstatuscode = {
 export type Abs_programsettingsesstatuscode = keyof typeof Abs_programsettingsesstatuscode;
 
 export interface Abs_programsettingsesBase {
+  abs_applogo?: string;
   abs_brandcolor?: string;
   abs_communityname?: string;
   abs_copilotcommunityurl?: string;

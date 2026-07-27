@@ -69,7 +69,7 @@ export function rgba(hex: string, alpha: number): string {
 export function applyBrand(input?: string | null): void {
   const root = document.documentElement;
   const hex = normalizeBrand(input);
-  const vars = ['--primary', '--primary-hover', '--primary-soft', '--sidebar-active'];
+  const vars = ['--primary', '--primary-hover', '--primary-soft', '--sidebar-active', '--sidebar-bg'];
   if (!hex) {
     vars.forEach((v) => root.style.removeProperty(v));
     return;
@@ -78,4 +78,6 @@ export function applyBrand(input?: string | null): void {
   root.style.setProperty('--primary-hover', shade(hex, -0.14));
   root.style.setProperty('--primary-soft', rgba(hex, 0.14));
   root.style.setProperty('--sidebar-active', hex);
+  // Give the left panel a deep, readable tint of the brand hue.
+  root.style.setProperty('--sidebar-bg', shade(hex, -0.78));
 }

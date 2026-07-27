@@ -41,19 +41,24 @@ function CommunityButton() {
 }
 
 export default function Layout() {
-  const { currentUser, currentChampion, isProgramManager, isAppAdmin, isAdmin } = useAppData();
+  const { currentUser, currentChampion, isProgramManager, isAppAdmin, isAdmin, settings } = useAppData();
   const loc = useLocation();
   const base = '/' + (loc.pathname.split('/')[1] ?? '');
   const title = TITLES[base] ?? 'AI Champions Hub';
   const name = currentChampion?.crd49_displayname || currentUser?.fullName || 'Guest';
   const role = isProgramManager ? 'Program Manager' : isAppAdmin ? 'App Admin' : 'Champion';
   const navItems = NAV.filter((n) => !n.adminOnly || isAdmin);
+  const logo = settings?.abs_applogo?.trim();
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <span className="brand-logo">🤖</span>
+          {logo ? (
+            <img className="brand-logo brand-logo-img" src={logo} alt="App logo" />
+          ) : (
+            <span className="brand-logo">🤖</span>
+          )}
           <span>AI Champions Hub</span>
         </div>
         <nav className="sidebar-nav">

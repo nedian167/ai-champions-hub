@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import {
   ProgramSettingsSvc, AppAdminsSvc, DepartmentsSvc,
@@ -20,6 +20,7 @@ export default function SettingsScreen() {
     communityName: settings?.abs_communityname ?? '',
     sharepoint: settings?.crd49_sharepointurl ?? '',
     brand: normalizeBrand(settings?.abs_brandcolor) ?? DEFAULT_BRAND,
+    logo: settings?.abs_applogo ?? '',
   });
   const [savingCfg, setSavingCfg] = useState(false);
 
@@ -32,6 +33,7 @@ export default function SettingsScreen() {
       communityName: settings?.abs_communityname ?? '',
       sharepoint: settings?.crd49_sharepointurl ?? '',
       brand: normalizeBrand(settings?.abs_brandcolor) ?? DEFAULT_BRAND,
+      logo: settings?.abs_applogo ?? '',
     });
   }, [settings]);
 
@@ -42,6 +44,42 @@ export default function SettingsScreen() {
   function previewBrand(hex: string) {
     setCfg((c) => ({ ...c, brand: hex }));
     applyBrand(hex);
+  }
+
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Read an image file, downscale it (max 96px) and store as a compact data URL.
+  function onLogoFile(file: File) {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 96;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/png');
+        if (dataUrl.length > 280000) {
+          toast.error('That image is too large even after resizing. Try a simpler logo.');
+          return;
+        }
+        setCfg((c) => ({ ...c, logo: dataUrl }));
+      };
+      img.onerror = () => toast.error('Could not read that image.');
+      img.src = reader.result as string;
+    };
+    reader.onerror = () => toast.error('Could not read that file.');
+    reader.readAsDataURL(file);
   }
 
   const [showAdmin, setShowAdmin] = useState(false);
@@ -110,6 +148,7 @@ export default function SettingsScreen() {
         abs_communityname: cfg.communityName.trim() || null,
         crd49_sharepointurl: cfg.sharepoint.trim() || null,
         abs_brandcolor: normalizeBrand(cfg.brand) === DEFAULT_BRAND ? null : normalizeBrand(cfg.brand),
+        abs_applogo: cfg.logo || null,
       };
       if (settings) {
         const res = await ProgramSettingsSvc.update(settings.abs_programsettingsid, fields as never);
@@ -297,6 +336,35 @@ export default function SettingsScreen() {
         <p className="item-sub" style={{ marginTop: 0 }}>
           Choose a brand color to recolor buttons, links, highlights and the active navigation across the whole app for every user.
         </p>
+        <div className="brand-logo-row">
+          <div className="brand-logo-preview">
+            {cfg.logo ? <img src={cfg.logo} alt="App logo preview" /> : <span>🤖</span>}
+          </div>
+          <div className="center-col spacer">
+            <span className="item-title">App logo</span>
+            <span className="item-sub">Shown at the top of the left panel. Square PNG/JPG works best — it's resized automatically.</span>
+          </div>
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onLogoFile(f);
+              e.target.value = '';
+            }}
+          />
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => logoInputRef.current?.click()}>
+            {cfg.logo ? 'Replace' : 'Upload'}
+          </button>
+          {cfg.logo && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setCfg((c) => ({ ...c, logo: '' }))}>
+              Remove
+            </button>
+          )}
+        </div>
+        <div className="divider" />
         <div className="brand-swatches">
           {BRAND_PRESETS.map((p) => {
             const active = normalizeBrand(cfg.brand) === p.color;
