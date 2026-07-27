@@ -114,7 +114,7 @@ export default function HomeScreen() {
       </div>
 
       <div className="grid grid-2 mt-24">
-        <Card title="⏳ Pending Claims" action={<span className="section-link link" onClick={() => nav('/activities')}>View all</span>}>
+        <Card title="⏳ Pending Claims" action={<span className="section-link link" onClick={() => nav('/activities', { state: { tab: 'claims', claimStatus: ClaimStatus.Pending } })}>View all</span>}>
           {pendingClaims.length === 0 ? (
             <EmptyState icon="✅" title="No pending claims" message="All caught up!" />
           ) : (
@@ -123,7 +123,14 @@ export default function HomeScreen() {
                 const champ = championById.get(cl._crd49_champion_value ?? '');
                 const act = activityById.get(cl._crd49_activity_value ?? '');
                 return (
-                  <div className="list-item" key={cl.abs_activityclaimid}>
+                  <div
+                    className="list-item clickable"
+                    key={cl.abs_activityclaimid}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => nav('/activities', { state: { tab: 'claims', claimStatus: ClaimStatus.Pending, openClaimId: cl.abs_activityclaimid } })}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); nav('/activities', { state: { tab: 'claims', claimStatus: ClaimStatus.Pending, openClaimId: cl.abs_activityclaimid } }); } }}
+                  >
                     <Avatar name={champ?.crd49_displayname ?? '?'} size={34} />
                     <div className="center-col spacer">
                       <span className="item-title">{act?.abs_title ?? 'Activity'}</span>

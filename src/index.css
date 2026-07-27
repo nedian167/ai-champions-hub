@@ -269,6 +269,19 @@ h4 {
 .mt-16 {
   margin-top: 16px;
 }
+.mt-8 {
+  margin-top: 8px;
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.detail-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 
 /* ---------- Cards ---------- */
 .card {

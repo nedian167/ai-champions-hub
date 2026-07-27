@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
 import {
   ActivitiesSvc, ActivityClaimsSvc, ClaimEvidencesSvc, ChampionsSvc, bind,
@@ -13,7 +13,7 @@ import {
 } from '../lib/enums';
 import { formatDate } from '../lib/format';
 import type { PillColor } from '../components/ui';
-import type { Abs_activities } from '../data/entities';
+import type { Abs_activities, Abs_activityclaims } from '../data/entities';
 
 type Tab = 'activities' | 'claims';
 
@@ -23,11 +23,12 @@ function claimColor(s?: number): PillColor {
 
 export default function ActivitiesScreen() {
   const {
-    activities, claims, campaigns, settings, currentChampion, isAdmin, reload,
+    activities, claims, evidence, campaigns, settings, currentChampion, isAdmin, reload,
     championById, activityById, campaignById, pointsFor,
   } = useAppData();
   const toast = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [tab, setTab] = useState<Tab>(
     () => ((location.state as { tab?: Tab } | null)?.tab === 'claims' ? 'claims' : 'activities'),
@@ -41,7 +42,9 @@ export default function ActivitiesScreen() {
   );
   const [showNew, setShowNew] = useState(false);
   const [claimFor, setClaimFor] = useState<Abs_activities | null>(null);
+  const [detail, setDetail] = useState<Abs_activityclaims | null>(null);
   const [saving, setSaving] = useState(false);
+  const autoOpenedRef = useRef<string | null>(null);
 
   const [newForm, setNewForm] = useState({
     title: '', description: '', type: ActivityType.OnlineCourse as number, points: 10,
@@ -65,6 +68,26 @@ export default function ActivitiesScreen() {
   function goClaims(status: number | 'all') {
     setClaimStatusFilter(status);
     setTab('claims');
+  }
+
+  useEffect(() => {
+    const openId = (location.state as { openClaimId?: string } | null)?.openClaimId;
+    if (openId && autoOpenedRef.current !== openId) {
+      const cl = claims.find((c) => c.abs_activityclaimid === openId);
+      if (cl) {
+        autoOpenedRef.current = openId;
+        setTab('claims');
+        setDetail(cl);
+      }
+    }
+  }, [location.state, claims]);
+
+  function closeDetail() {
+    setDetail(null);
+    if ((location.state as { openClaimId?: string } | null)?.openClaimId) {
+      navigate(location.pathname, { replace: true, state: { tab: 'claims', claimStatus: ClaimStatus.Pending } });
+      autoOpenedRef.current = null;
+    }
   }
 
   async function createActivity() {
@@ -153,6 +176,7 @@ export default function ActivitiesScreen() {
         if (claim._crd49_champion_value) await bumpPoints(claim._crd49_champion_value, pts);
       }
       toast.success(approve ? 'Claim approved.' : 'Claim rejected.');
+      setDetail(null);
       await reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to update claim.');
@@ -250,7 +274,14 @@ export default function ActivitiesScreen() {
                 const act = activityById.get(cl._crd49_activity_value ?? '');
                 const camp = campaignById.get(cl._crd49_campaign_value ?? '');
                 return (
-                  <div className="list-item" key={cl.abs_activityclaimid}>
+                  <div
+                    className="list-item clickable"
+                    key={cl.abs_activityclaimid}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setDetail(cl)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetail(cl); } }}
+                  >
                     <Avatar name={champ?.crd49_displayname ?? '?'} size={36} />
                     <div className="center-col spacer">
                       <span className="item-title">{act?.abs_title ?? 'Activity'}</span>
@@ -258,7 +289,7 @@ export default function ActivitiesScreen() {
                     </div>
                     <Pill color={claimColor(cl.crd49_status)}>{ClaimStatusLabel[cl.crd49_status]}</Pill>
                     {isAdmin && cl.crd49_status === ClaimStatus.Pending && (
-                      <div className="row">
+                      <div className="row" onClick={(e) => e.stopPropagation()}>
                         <button className="btn btn-success btn-sm" disabled={saving} onClick={() => decide(cl.abs_activityclaimid, true)}>Approve</button>
                         <button className="btn btn-danger btn-sm" disabled={saving} onClick={() => decide(cl.abs_activityclaimid, false)}>Reject</button>
                       </div>
@@ -336,6 +367,72 @@ export default function ActivitiesScreen() {
           </div>
         </Modal>
       )}
+      {detail && (() => {
+        const champ = championById.get(detail._crd49_champion_value ?? '');
+        const act = activityById.get(detail._crd49_activity_value ?? '');
+        const camp = campaignById.get(detail._crd49_campaign_value ?? '');
+        const pts = act?.crd49_points ?? 0;
+        const ev = evidence.filter((e) => e._abs_activityclaim_value === detail.abs_activityclaimid);
+        const canDecide = isAdmin && detail.crd49_status === ClaimStatus.Pending;
+        return (
+          <Modal
+            title="Claim details"
+            onClose={closeDetail}
+            footer={
+              canDecide ? (
+                <>
+                  <button className="btn btn-danger" disabled={saving} onClick={() => decide(detail.abs_activityclaimid, false)}>Reject</button>
+                  <button className="btn btn-success" disabled={saving} onClick={() => decide(detail.abs_activityclaimid, true)}>{saving ? 'Saving…' : 'Approve'}</button>
+                </>
+              ) : (
+                <button className="btn btn-secondary" onClick={closeDetail}>Close</button>
+              )
+            }
+          >
+            <div className="row" style={{ alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <Avatar name={champ?.crd49_displayname ?? '?'} size={44} />
+              <div className="center-col spacer">
+                <span className="item-title">{act?.abs_title ?? 'Activity'}</span>
+                <span className="item-sub">{champ?.crd49_displayname ?? 'Unknown'}</span>
+              </div>
+              <Pill color={claimColor(detail.crd49_status)}>{ClaimStatusLabel[detail.crd49_status]}</Pill>
+            </div>
+            <div className="detail-grid">
+              <div><span className="help-text">Campaign</span><div>{camp?.abs_name ?? '—'}</div></div>
+              <div><span className="help-text">Points</span><div>{pts}</div></div>
+              <div><span className="help-text">Claimed</span><div>{formatDate(detail.crd49_claimeddate)}</div></div>
+              <div><span className="help-text">Type</span><div>{act ? ActivityTypeLabel[act.crd49_activitytype] : '—'}</div></div>
+            </div>
+            {detail.crd49_notes && (
+              <>
+                <div className="divider" />
+                <span className="help-text">Notes</span>
+                <div>{detail.crd49_notes}</div>
+              </>
+            )}
+            <div className="divider" />
+            <span className="help-text">Evidence</span>
+            {ev.length === 0 ? (
+              <div className="item-sub">No evidence attached.</div>
+            ) : (
+              <div className="list mt-8">
+                {ev.map((e) => (
+                  <div className="list-item" key={e.abs_claimevidenceid}>
+                    <div className="center-col spacer">
+                      {e.abs_evidenceurl ? (
+                        <a href={e.abs_evidenceurl} target="_blank" rel="noreferrer" className="link item-title">🔗 Open evidence</a>
+                      ) : (
+                        <span className="item-title">Evidence</span>
+                      )}
+                      <span className="item-sub">{e.abs_notes ?? ''}{e.abs_uploadeddate ? ` · ${formatDate(e.abs_uploadeddate)}` : ''}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Modal>
+        );
+      })()}
     </>
   );
 }
