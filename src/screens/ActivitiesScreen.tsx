@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
 import {
-  ActivitiesSvc, ActivityClaimsSvc, ClaimEvidencesSvc, ChampionsSvc, bind,
+  ActivitiesSvc, ActivityClaimsSvc, ClaimEvidencesSvc, ChampionsSvc, CampaignActivitiesSvc, bind,
 } from '../data/entities';
 import { Card, KpiCard, Pill, EmptyState, Tabs, Avatar, Field } from '../components/ui';
 import { Modal } from '../components/Modal';
@@ -12,6 +12,10 @@ import {
   ClaimStatus, ClaimStatusLabel, optionsOf,
 } from '../lib/enums';
 import { formatDate } from '../lib/format';
+import { isCampaignLive } from '../lib/campaignStatus';
+import {
+  campaignIdsForActivity, isActivityActive, claimableCampaignsForActivity, joinedCampaignIds,
+} from '../lib/access';
 import type { PillColor } from '../components/ui';
 import type { Abs_activities, Abs_activityclaims } from '../data/entities';
 
@@ -23,7 +27,8 @@ function claimColor(s?: number): PillColor {
 
 export default function ActivitiesScreen() {
   const {
-    activities, claims, evidence, campaigns, settings, currentChampion, isAdmin, reload,
+    activities, claims, evidence, campaigns, campaignActivities, participations,
+    settings, currentChampion, isAdmin, reload,
     championById, activityById, campaignById, pointsFor,
   } = useAppData();
   const toast = useToast();
@@ -48,7 +53,7 @@ export default function ActivitiesScreen() {
 
   const [newForm, setNewForm] = useState({
     title: '', description: '', type: ActivityType.OnlineCourse as number, points: 10,
-    validation: ValidationMode.SelfClaimed as number, lmslink: '',
+    validation: ValidationMode.SelfClaimed as number, lmslink: '', campaign: '',
   });
   const [claimForm, setClaimForm] = useState({ campaign: '', notes: '', evidenceurl: '' });
 
@@ -62,6 +67,34 @@ export default function ActivitiesScreen() {
   );
 
   const shownActivities = activities.filter((a) => typeFilter === 'all' || a.crd49_activitytype === typeFilter);
+
+  // Campaigns the current champion has joined that are still live — these unlock activities.
+  const joinedLiveCampaigns = useMemo(
+    () => {
+      const joined = joinedCampaignIds(currentChampion?.abs_championid, participations);
+      return campaigns.filter((c) => joined.has(c.abs_campaignid) && isCampaignLive(c));
+    },
+    [campaigns, participations, currentChampion],
+  );
+
+  // Activity ids a champion can access = linked to a joined+live campaign.
+  const accessibleActivityIds = useMemo(() => {
+    const set = new Set<string>();
+    const liveJoined = new Set(joinedLiveCampaigns.map((c) => c.abs_campaignid));
+    for (const ca of campaignActivities) {
+      if (ca._crd49_campaign_value && liveJoined.has(ca._crd49_campaign_value) && ca._crd49_activity_value) {
+        set.add(ca._crd49_activity_value);
+      }
+    }
+    return set;
+  }, [campaignActivities, joinedLiveCampaigns]);
+
+  // Admins see every activity; champions see only the ones their joined campaigns unlock.
+  const visibleActivities = useMemo(
+    () => (isAdmin ? shownActivities : shownActivities.filter((a) => accessibleActivityIds.has(a.abs_activityid))),
+    [isAdmin, shownActivities, accessibleActivityIds],
+  );
+
   const allClaims = isAdmin ? claims : myClaims;
   const shownClaims = allClaims.filter((c) => claimStatusFilter === 'all' || c.crd49_status === claimStatusFilter);
 
@@ -82,6 +115,16 @@ export default function ActivitiesScreen() {
     }
   }, [location.state, claims]);
 
+  useEffect(() => {
+    const st = location.state as { openNew?: boolean; campaignId?: string } | null;
+    if (st?.openNew && autoOpenedRef.current !== 'new') {
+      autoOpenedRef.current = 'new';
+      openNewActivity(st.campaignId);
+      navigate(location.pathname, { replace: true, state: { tab: 'activities' } });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
+
   function closeDetail() {
     setDetail(null);
     if ((location.state as { openClaimId?: string } | null)?.openClaimId) {
@@ -92,6 +135,7 @@ export default function ActivitiesScreen() {
 
   async function createActivity() {
     if (!newForm.title.trim()) { toast.error('Title is required.'); return; }
+    if (!newForm.campaign) { toast.error('Select the campaign this activity belongs to.'); return; }
     setSaving(true);
     try {
       const res = await ActivitiesSvc.create({
@@ -102,16 +146,30 @@ export default function ActivitiesScreen() {
         crd49_validationmode: newForm.validation,
         crd49_lmslink: newForm.lmslink.trim() || undefined,
       } as never);
-      if (!res.success) throw new Error(res.error?.message ?? 'Create failed');
-      toast.success('Activity created.');
+      if (!res.success || !res.data) throw new Error(res.error?.message ?? 'Create failed');
+
+      // Link the new activity to its campaign (activities are always created under a campaign).
+      const link = await CampaignActivitiesSvc.create({
+        abs_name: newForm.title.trim(),
+        'crd49_Activity@odata.bind': bind('activity', res.data.abs_activityid),
+        'crd49_Campaign@odata.bind': bind('campaign', newForm.campaign),
+      } as never);
+      if (!link.success) throw new Error(link.error?.message ?? 'Failed to link activity to campaign');
+
+      toast.success('Activity created under campaign.');
       setShowNew(false);
-      setNewForm({ title: '', description: '', type: ActivityType.OnlineCourse, points: 10, validation: ValidationMode.SelfClaimed, lmslink: '' });
+      setNewForm({ title: '', description: '', type: ActivityType.OnlineCourse, points: 10, validation: ValidationMode.SelfClaimed, lmslink: '', campaign: '' });
       await reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to create activity.');
     } finally {
       setSaving(false);
     }
+  }
+
+  function openNewActivity(campaignId?: string) {
+    setNewForm({ title: '', description: '', type: ActivityType.OnlineCourse, points: 10, validation: ValidationMode.SelfClaimed, lmslink: '', campaign: campaignId ?? '' });
+    setShowNew(true);
   }
 
   async function submitClaim() {
@@ -192,7 +250,7 @@ export default function ActivitiesScreen() {
           <h1>Activities</h1>
           <div className="page-subtitle">Earn points by completing learning activities and claiming them.</div>
         </div>
-        {isAdmin && <button className="btn btn-primary" onClick={() => setShowNew(true)}>➕ New Activity</button>}
+        {isAdmin && <button className="btn btn-primary" onClick={() => openNewActivity()}>➕ New Activity</button>}
       </div>
 
       <div className="grid grid-kpi">
@@ -210,7 +268,7 @@ export default function ActivitiesScreen() {
           active={tab}
           onChange={setTab}
           tabs={[
-            { key: 'activities', label: `Activities (${activities.length})` },
+            { key: 'activities', label: `Activities (${visibleActivities.length})` },
             { key: 'claims', label: `Claims (${allClaims.length})` },
           ]}
         />
@@ -224,34 +282,56 @@ export default function ActivitiesScreen() {
               {optionsOf(ActivityTypeLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
-          {shownActivities.length === 0 ? (
-            <Card><EmptyState icon="🎯" title="No activities" message="Create an activity to get started." /></Card>
+          {visibleActivities.length === 0 ? (
+            <Card>
+              {isAdmin ? (
+                <EmptyState icon="🎯" title="No activities" message="Create an activity under a campaign to get started." action={<button className="btn btn-primary" onClick={() => openNewActivity()}>➕ New Activity</button>} />
+              ) : joinedLiveCampaigns.length === 0 ? (
+                <EmptyState icon="🔒" title="Join a campaign to unlock activities" message="Activities live inside campaigns. Join an active campaign to see and claim its activities." action={<button className="btn btn-primary" onClick={() => navigate('/campaigns')}>Browse campaigns</button>} />
+              ) : (
+                <EmptyState icon="🎯" title="No activities available" message="The campaigns you've joined don't have any activities yet." />
+              )}
+            </Card>
           ) : (
             <div className="grid grid-cards">
-              {shownActivities.map((a) => (
-                <div className="card entity-card" key={a.abs_activityid}>
-                  <div className="ec-head">
-                    <span className="points-badge">{a.crd49_points} pts</span>
-                    <Pill color="blue">{ActivityTypeLabel[a.crd49_activitytype]}</Pill>
+              {visibleActivities.map((a) => {
+                const linkedIds = campaignIdsForActivity(a.abs_activityid, campaignActivities);
+                const linkedNames = linkedIds.map((cid) => campaignById.get(cid)?.abs_name).filter(Boolean) as string[];
+                const active = isActivityActive(a.abs_activityid, campaignActivities, campaignById);
+                const claimable = claimableCampaignsForActivity(a.abs_activityid, currentChampion?.abs_championid, campaignActivities, participations, campaignById);
+                return (
+                  <div className={`card entity-card${active ? '' : ' campaign-expired'}`} key={a.abs_activityid}>
+                    <div className="ec-head">
+                      <span className="points-badge">{a.crd49_points} pts</span>
+                      <Pill color="blue">{ActivityTypeLabel[a.crd49_activitytype]}</Pill>
+                    </div>
+                    <h3>{a.abs_title}</h3>
+                    <p className="entity-desc">{a.crd49_description || 'No description.'}</p>
+                    <div className="row">
+                      <Pill color={a.crd49_validationmode === ValidationMode.SelfClaimed ? 'green' : 'amber'}>
+                        {ValidationModeLabel[a.crd49_validationmode]}
+                      </Pill>
+                      {!active && <Pill color="gray">Inactive</Pill>}
+                    </div>
+                    <div className="item-sub" style={{ marginTop: 8 }}>
+                      {linkedNames.length ? `📣 ${linkedNames.join(', ')}` : '📣 Not linked to a campaign'}
+                    </div>
+                    {a.crd49_lmslink && <a href={a.crd49_lmslink} target="_blank" rel="noreferrer" className="tag-link link">🔗 Open Learning Content</a>}
+                    <div className="divider" />
+                    {claimable.length > 0 ? (
+                      <button className="btn btn-primary btn-sm btn-block" onClick={() => { setClaimFor(a); setClaimForm({ campaign: claimable.length === 1 ? claimable[0].abs_campaignid : '', notes: '', evidenceurl: settings?.crd49_sharepointurl ?? '' }); }}>
+                        Claim Activity
+                      </button>
+                    ) : !active ? (
+                      <span className="help-text">This activity's campaign is inactive.</span>
+                    ) : currentChampion ? (
+                      <span className="help-text">Join this activity's campaign to claim it.</span>
+                    ) : (
+                      <span className="help-text">Join a campaign to earn points.</span>
+                    )}
                   </div>
-                  <h3>{a.abs_title}</h3>
-                  <p className="entity-desc">{a.crd49_description || 'No description.'}</p>
-                  <div className="row">
-                    <Pill color={a.crd49_validationmode === ValidationMode.SelfClaimed ? 'green' : 'amber'}>
-                      {ValidationModeLabel[a.crd49_validationmode]}
-                    </Pill>
-                  </div>
-                  {a.crd49_lmslink && <a href={a.crd49_lmslink} target="_blank" rel="noreferrer" className="tag-link link">🔗 Open Learning Content</a>}
-                  <div className="divider" />
-                  {currentChampion ? (
-                    <button className="btn btn-primary btn-sm btn-block" onClick={() => { setClaimFor(a); setClaimForm({ campaign: '', notes: '', evidenceurl: settings?.crd49_sharepointurl ?? '' }); }}>
-                      Claim Activity
-                    </button>
-                  ) : (
-                    <span className="help-text">Join a campaign with this activity to earn points.</span>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
@@ -314,6 +394,12 @@ export default function ActivitiesScreen() {
             </>
           }
         >
+          <Field label="Campaign" help="Activities are always created under a campaign. Champions must join the campaign to access this activity.">
+            <select className="select" value={newForm.campaign} onChange={(e) => setNewForm({ ...newForm, campaign: e.target.value })}>
+              <option value="">Select a campaign…</option>
+              {campaigns.map((c) => <option key={c.abs_campaignid} value={c.abs_campaignid}>{c.abs_name}{isCampaignLive(c) ? '' : ' (inactive)'}</option>)}
+            </select>
+          </Field>
           <Field label="Title"><input className="input" value={newForm.title} onChange={(e) => setNewForm({ ...newForm, title: e.target.value })} /></Field>
           <Field label="Description"><textarea className="textarea" value={newForm.description} onChange={(e) => setNewForm({ ...newForm, description: e.target.value })} /></Field>
           <div className="field-row">
@@ -346,10 +432,10 @@ export default function ActivitiesScreen() {
             </>
           }
         >
-          <Field label="Campaign" help="Choose the campaign you're claiming this under.">
+          <Field label="Campaign" help="You can only claim under a live campaign you've joined that includes this activity.">
             <select className="select" value={claimForm.campaign} onChange={(e) => setClaimForm({ ...claimForm, campaign: e.target.value })}>
               <option value="">Select a campaign…</option>
-              {campaigns.map((c) => <option key={c.abs_campaignid} value={c.abs_campaignid}>{c.abs_name}</option>)}
+              {claimableCampaignsForActivity(claimFor.abs_activityid, currentChampion?.abs_championid, campaignActivities, participations, campaignById).map((c) => <option key={c.abs_campaignid} value={c.abs_campaignid}>{c.abs_name}</option>)}
             </select>
           </Field>
           <Field label="Notes"><textarea className="textarea" value={claimForm.notes} onChange={(e) => setClaimForm({ ...claimForm, notes: e.target.value })} placeholder="Anything the approver should know…" /></Field>
