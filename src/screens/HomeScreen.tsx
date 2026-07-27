@@ -268,12 +268,19 @@ export default function HomeScreen() {
       <div className="grid grid-2 mt-24">
         <Card title={isChampionView ? '📊 My Activity Completion' : '📊 Activity Completion'}>
           <div className="donut-wrap">
-            <Donut percent={approvalPct} />
+            <Donut
+              percent={approvalPct}
+              segments={[
+                { value: donutApproved.length, color: 'var(--green)' },
+                { value: donutPending.length, color: 'var(--amber)' },
+                { value: donutRejected.length, color: 'var(--red)' },
+              ]}
+            />
             <div>
               <div className="strong">{donutApproved.length} of {donutClaims.length} claims approved</div>
               <div className="legend mt-16">
                 <span><span className="legend-dot" style={{ background: 'var(--green)' }} /> Approved · {donutApproved.length}</span>
-                <span><span className="legend-dot" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-strong)' }} /> Pending · {donutPending.length}</span>
+                <span><span className="legend-dot" style={{ background: 'var(--amber)' }} /> Pending · {donutPending.length}</span>
                 <span><span className="legend-dot" style={{ background: 'var(--red)' }} /> Rejected · {donutRejected.length}</span>
               </div>
             </div>
