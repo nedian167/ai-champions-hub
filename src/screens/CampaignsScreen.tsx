@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
-import { CampaignsSvc, CampaignDepartmentsSvc, bind } from '../data/entities';
+import { CampaignsSvc, CampaignDepartmentsSvc, bind, type Abs_campaigns } from '../data/entities';
 import { Card, KpiCard, Pill, EmptyState, Tabs, Field } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
@@ -11,10 +11,26 @@ import { campaignStatusColor } from './HomeScreen';
 
 type Tab = 'active' | 'draft' | 'completed';
 
+const BANNER_FALLBACK: Record<number, string> = {
+  [CampaignStatus.Active]: 'linear-gradient(135deg, #0ea5e9 0%, #2563eb 55%, #7c3aed 100%)',
+  [CampaignStatus.Draft]: 'linear-gradient(135deg, #64748b 0%, #475569 60%, #334155 100%)',
+  [CampaignStatus.Completed]: 'linear-gradient(135deg, #10b981 0%, #059669 60%, #047857 100%)',
+};
+
+function bannerStyle(c: Abs_campaigns): CSSProperties {
+  const fallback = BANNER_FALLBACK[c.crd49_status] ?? BANNER_FALLBACK[CampaignStatus.Active];
+  if (c.crd49_imageurl) {
+    return {
+      backgroundImage: `linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.05) 55%, rgba(0,0,0,0) 100%), url("${c.crd49_imageurl}")`,
+    };
+  }
+  return { backgroundImage: `linear-gradient(to top, rgba(0,0,0,0.35), rgba(0,0,0,0) 60%), ${fallback}` };
+}
+
 export default function CampaignsScreen() {
   const nav = useNavigate();
   const {
-    campaigns, departments, champions, campaignDepartments, participations, isAdmin, reload,
+    campaigns, departments, champions, campaignDepartments, participations, currentChampion, isAdmin, reload,
   } = useAppData();
   const toast = useToast();
 
@@ -25,6 +41,13 @@ export default function CampaignsScreen() {
     name: '', theme: '', description: '', startdate: toDateInput(new Date().toISOString()),
     enddate: '', status: CampaignStatus.Draft as number, owner: '', imageurl: '', departments: [] as string[],
   });
+
+  const [banner, setBanner] = useState<Abs_campaigns | null>(null);
+  const [bannerUrl, setBannerUrl] = useState('');
+  const [savingBanner, setSavingBanner] = useState(false);
+
+  const canEditBanner = (c: Abs_campaigns) =>
+    isAdmin || (!!currentChampion && c._crd49_campaignowner_value === currentChampion.abs_championid);
 
   const deptsByCampaign = useMemo(() => {
     const m = new Map<string, string[]>();
@@ -58,6 +81,30 @@ export default function CampaignsScreen() {
       : tab === 'draft' ? c.crd49_status === CampaignStatus.Draft
         : c.crd49_status === CampaignStatus.Completed,
   );
+
+  function openBanner(c: Abs_campaigns) {
+    setBanner(c);
+    setBannerUrl(c.crd49_imageurl ?? '');
+  }
+
+  async function saveBanner() {
+    if (!banner) return;
+    setSavingBanner(true);
+    try {
+      const url = bannerUrl.trim();
+      const res = await CampaignsSvc.update(banner.abs_campaignid, {
+        crd49_imageurl: url ? url : null,
+      } as never);
+      if (!res.success) throw new Error(res.error?.message ?? 'Update failed');
+      toast.success(url ? 'Banner updated.' : 'Banner removed.');
+      setBanner(null);
+      await reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to update banner.');
+    } finally {
+      setSavingBanner(false);
+    }
+  }
 
   async function createCampaign() {
     if (!form.name.trim() || !form.startdate || !form.enddate) {
@@ -102,14 +149,14 @@ export default function CampaignsScreen() {
       <div className="page-header">
         <div>
           <h1>Campaigns</h1>
-          <div className="page-subtitle">Themed learning drives that rally champions around a goal.</div>
+          <div className="page-subtitle">Manage AI adoption campaigns and track progress</div>
         </div>
         {isAdmin && <button className="btn btn-primary" onClick={() => setShow(true)}>➕ New Campaign</button>}
       </div>
 
       <div className="grid grid-kpi">
-        <KpiCard label="Active" value={counts.active} icon="📣" iconBg="var(--green-soft)" iconColor="var(--green)" />
-        <KpiCard label="Drafts" value={counts.draft} icon="📝" iconBg="var(--gray-soft)" iconColor="var(--gray)" />
+        <KpiCard label="Active Campaigns" value={counts.active} icon="🚀" iconBg="var(--green-soft)" iconColor="var(--green)" />
+        <KpiCard label="Drafts" value={counts.draft} icon="🕑" iconBg="var(--gray-soft)" iconColor="var(--gray)" />
         <KpiCard label="Completed" value={counts.completed} icon="✅" iconBg="var(--blue-soft)" iconColor="var(--blue)" />
       </div>
 
@@ -132,25 +179,70 @@ export default function CampaignsScreen() {
           {shown.map((c) => {
             const audience = deptsByCampaign.get(c.abs_campaignid);
             return (
-              <div className="card entity-card" key={c.abs_campaignid} style={{ cursor: 'pointer' }} onClick={() => nav(`/campaigns/${c.abs_campaignid}`)}>
-                <div className="ec-head">
-                  <Pill color={audience && audience.length ? 'purple' : 'gray'}>
-                    {audience && audience.length ? audience.join(', ') : 'All Employees'}
-                  </Pill>
-                  <Pill color={campaignStatusColor(c.crd49_status)}>{CampaignStatusLabel[c.crd49_status]}</Pill>
+              <div className="card campaign-card" key={c.abs_campaignid} onClick={() => nav(`/campaigns/${c.abs_campaignid}`)}>
+                <div className="cc-banner" style={bannerStyle(c)}>
+                  <div className="cc-banner-pills">
+                    <Pill color={audience && audience.length ? 'purple' : 'gray'}>
+                      🌐 {audience && audience.length ? audience.join(', ') : 'All Employees'}
+                    </Pill>
+                    <Pill color={campaignStatusColor(c.crd49_status)}>{CampaignStatusLabel[c.crd49_status]}</Pill>
+                  </div>
+                  {canEditBanner(c) && (
+                    <button
+                      className="cc-banner-edit"
+                      title={c.crd49_imageurl ? 'Change banner image' : 'Add banner image'}
+                      onClick={(e) => { e.stopPropagation(); openBanner(c); }}
+                    >
+                      🖼
+                    </button>
+                  )}
+                  <div className="cc-banner-title">
+                    <h3>{c.abs_name}</h3>
+                    {c.crd49_theme && <span className="cc-theme">{c.crd49_theme}</span>}
+                  </div>
                 </div>
-                <h3>{c.abs_name}</h3>
-                {c.crd49_theme && <div className="item-sub">🎨 {c.crd49_theme}</div>}
-                <p className="entity-desc">{c.crd49_description || 'No description provided.'}</p>
-                <div className="row">
-                  <span className="item-sub">👥 {partCount.get(c.abs_campaignid) ?? 0} participants</span>
-                  <span className="spacer" />
-                  <span className="item-sub">Starts {formatDate(c.crd49_startdate)}</span>
+                <div className="cc-body">
+                  <p className="entity-desc">{c.crd49_description || 'No description provided.'}</p>
+                  <div className="row">
+                    <span className="item-sub">👥 {partCount.get(c.abs_campaignid) ?? 0}</span>
+                    <span className="spacer" />
+                    <span className="item-sub">📅 {formatDate(c.crd49_startdate)}</span>
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
+      )}
+
+      {banner && (
+        <Modal
+          title="Campaign banner"
+          onClose={() => setBanner(null)}
+          footer={
+            <>
+              <button className="btn btn-secondary" onClick={() => setBanner(null)}>Cancel</button>
+              <button className="btn btn-primary" disabled={savingBanner} onClick={saveBanner}>{savingBanner ? 'Saving…' : 'Save Banner'}</button>
+            </>
+          }
+        >
+          <Field label="Banner image URL" help="Paste a link to an image. Leave empty to remove the banner.">
+            <input
+              className="input"
+              value={bannerUrl}
+              onChange={(e) => setBannerUrl(e.target.value)}
+              placeholder="https://…/banner.png"
+            />
+          </Field>
+          <div
+            className="banner-preview"
+            style={bannerUrl.trim()
+              ? { backgroundImage: `url("${bannerUrl.trim()}")` }
+              : { background: BANNER_FALLBACK[banner.crd49_status] ?? BANNER_FALLBACK[CampaignStatus.Active], color: '#fff' }}
+          >
+            {bannerUrl.trim() ? '' : 'No banner — a themed gradient is shown instead'}
+          </div>
+        </Modal>
       )}
 
       {show && (
@@ -186,7 +278,7 @@ export default function CampaignsScreen() {
                 {optionsOf(CampaignStatusLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </Field>
-            <Field label="Image URL"><input className="input" value={form.imageurl} onChange={(e) => setForm({ ...form, imageurl: e.target.value })} placeholder="https://…" /></Field>
+            <Field label="Banner image URL"><input className="input" value={form.imageurl} onChange={(e) => setForm({ ...form, imageurl: e.target.value })} placeholder="https://…" /></Field>
           </div>
           <Field label="Audience departments" help="Leave empty to target all employees.">
             <div className="row">

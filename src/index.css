@@ -621,6 +621,109 @@ h4 {
   color: var(--text-muted);
   font-size: 0.82rem;
 }
+
+/* Campaign card with banner */
+.campaign-card {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.campaign-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+.cc-banner {
+  position: relative;
+  min-height: 150px;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: flex-end;
+}
+.cc-banner-pills {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.cc-banner-edit {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  border: none;
+  cursor: pointer;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+.campaign-card:hover .cc-banner-edit,
+.cc-banner-edit:focus-visible {
+  opacity: 1;
+}
+.cc-banner-edit:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+.cc-banner-title {
+  padding: 14px 16px 12px;
+  width: 100%;
+}
+.cc-banner-title h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 1.05rem;
+  line-height: 1.25;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.65);
+}
+.cc-banner-title .cc-theme {
+  display: block;
+  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.82rem;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+.cc-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.banner-preview {
+  margin-top: 10px;
+  height: 130px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+.campaign-hero {
+  height: 180px;
+  border-radius: 14px;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid var(--border);
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
 .points-badge {
   background: var(--primary-soft);
   color: var(--primary);

@@ -16,7 +16,7 @@ export default function CampaignDetailScreen() {
   const nav = useNavigate();
   const {
     campaignById, championById, departmentById, activityById,
-    campaignDepartments, campaignActivities, participations, events, isAdmin, reload,
+    campaignDepartments, campaignActivities, participations, events, currentChampion, isAdmin, reload,
   } = useAppData();
   const toast = useToast();
 
@@ -31,6 +31,7 @@ export default function CampaignDetailScreen() {
     startdate: toDateInput(campaign?.crd49_startdate),
     enddate: toDateInput(campaign?.crd49_enddate),
     status: campaign?.crd49_status ?? CampaignStatus.Draft as number,
+    imageurl: campaign?.crd49_imageurl ?? '',
   }));
 
   const audience = useMemo(
@@ -71,6 +72,7 @@ export default function CampaignDetailScreen() {
         crd49_startdate: form.startdate ? new Date(form.startdate).toISOString() : undefined,
         crd49_enddate: form.enddate ? new Date(form.enddate).toISOString() : undefined,
         crd49_status: form.status,
+        crd49_imageurl: form.imageurl.trim() ? form.imageurl.trim() : null,
       } as never);
       if (!res.success) throw new Error(res.error?.message ?? 'Update failed');
       toast.success('Campaign updated.');
@@ -84,12 +86,19 @@ export default function CampaignDetailScreen() {
   }
 
   const owner = championById.get(campaign._crd49_campaignowner_value ?? '');
+  const canEdit = isAdmin || (!!currentChampion && campaign._crd49_campaignowner_value === currentChampion.abs_championid);
 
   return (
     <>
       <div className="row" style={{ marginBottom: 12 }}>
         <span className="link" onClick={() => nav('/campaigns')}>← Campaigns</span>
       </div>
+      {campaign.crd49_imageurl && (
+        <div
+          className="campaign-hero"
+          style={{ backgroundImage: `url("${campaign.crd49_imageurl}")` }}
+        />
+      )}
       <div className="page-header">
         <div>
           <div className="row">
@@ -98,7 +107,7 @@ export default function CampaignDetailScreen() {
           </div>
           <div className="page-subtitle">{campaign.crd49_theme || 'Campaign'}</div>
         </div>
-        {isAdmin && <button className="btn btn-secondary" onClick={() => setEditing(true)}>✏️ Edit</button>}
+        {canEdit && <button className="btn btn-secondary" onClick={() => setEditing(true)}>✏️ Edit</button>}
       </div>
 
       <div className="grid grid-kpi">
@@ -211,6 +220,9 @@ export default function CampaignDetailScreen() {
             <select className="select" value={form.status} onChange={(e) => setForm({ ...form, status: Number(e.target.value) })}>
               {optionsOf(CampaignStatusLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+          </Field>
+          <Field label="Banner image URL" help="Paste a link to an image. Leave empty to remove the banner.">
+            <input className="input" value={form.imageurl} onChange={(e) => setForm({ ...form, imageurl: e.target.value })} placeholder="https://…/banner.png" />
           </Field>
         </Modal>
       )}
