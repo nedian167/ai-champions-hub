@@ -41,6 +41,7 @@ export default function HomeScreen() {
   const activeCampaigns = campaigns.filter((c) => isCampaignLive(c));
   const approvedClaims = claims.filter((c) => c.crd49_status === ClaimStatus.Approved);
   const pendingClaims = claims.filter((c) => c.crd49_status === ClaimStatus.Pending);
+  const rejectedClaims = claims.filter((c) => c.crd49_status === ClaimStatus.Rejected);
   const openRequests = requests.filter(
     (r) => r.crd49_status === RequestStatus.Open || r.crd49_status === RequestStatus.InReview,
   );
@@ -49,6 +50,7 @@ export default function HomeScreen() {
   const myClaims = useMemo(() => claims.filter((c) => c._crd49_champion_value === myId), [claims, myId]);
   const myApproved = myClaims.filter((c) => c.crd49_status === ClaimStatus.Approved);
   const myPending = myClaims.filter((c) => c.crd49_status === ClaimStatus.Pending);
+  const myRejected = myClaims.filter((c) => c.crd49_status === ClaimStatus.Rejected);
   const myRequests = useMemo(() => requests.filter((r) => r._crd49_champion_value === myId), [requests, myId]);
   const myOpenRequests = myRequests.filter(
     (r) => r.crd49_status === RequestStatus.Open || r.crd49_status === RequestStatus.InReview,
@@ -96,6 +98,7 @@ export default function HomeScreen() {
   const donutClaims = isChampionView ? myClaims : claims;
   const donutApproved = isChampionView ? myApproved : approvedClaims;
   const donutPending = isChampionView ? myPending : pendingClaims;
+  const donutRejected = isChampionView ? myRejected : rejectedClaims;
   const approvalPct = donutClaims.length ? (donutApproved.length / donutClaims.length) * 100 : 0;
   const greetName = firstName(currentChampion?.crd49_displayname || currentUser?.fullName);
 
@@ -271,6 +274,7 @@ export default function HomeScreen() {
               <div className="legend mt-16">
                 <span><span className="legend-dot" style={{ background: 'var(--green)' }} /> Approved · {donutApproved.length}</span>
                 <span><span className="legend-dot" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-strong)' }} /> Pending · {donutPending.length}</span>
+                <span><span className="legend-dot" style={{ background: 'var(--red)' }} /> Rejected · {donutRejected.length}</span>
               </div>
             </div>
           </div>
