@@ -1,0 +1,72 @@
+{
+  "version": "1.0",
+  "appId": "9079d85f-14b5-4de4-b277-8b72e3af2206",
+  "appDisplayName": "AI Champions Hub (Code)",
+  "region": "prod",
+  "environmentId": "961c1146-357f-e4b8-8d30-f6e1e514281b",
+  "description": " ",
+  "buildPath": "dist",
+  "buildEntryPoint": "index.html",
+  "localAppUrl": "http://localhost:3000",
+  "logoPath": "Default",
+  "connectionReferences": {},
+  "databaseReferences": {
+    "default.cds": {
+      "dataSources": {
+        "champions": {
+          "entitySetName": "abs_champions",
+          "logicalName": "abs_champion"
+        },
+        "departments": {
+          "entitySetName": "abs_departments",
+          "logicalName": "abs_department"
+        },
+        "campaigns": {
+          "entitySetName": "abs_campaigns",
+          "logicalName": "abs_campaign"
+        },
+        "campaigndepartments": {
+          "entitySetName": "abs_campaigndepartments",
+          "logicalName": "abs_campaigndepartment"
+        },
+        "campaignactivities": {
+          "entitySetName": "abs_campaignactivities",
+          "logicalName": "abs_campaignactivity"
+        },
+        "campaignparticipations": {
+          "entitySetName": "abs_campaignparticipations",
+          "logicalName": "abs_campaignparticipation"
+        },
+        "activities": {
+          "entitySetName": "abs_activities",
+          "logicalName": "abs_activity"
+        },
+        "activityclaims": {
+          "entitySetName": "abs_activityclaims",
+          "logicalName": "abs_activityclaim"
+        },
+        "claimevidence": {
+          "entitySetName": "abs_claimevidences",
+          "logicalName": "abs_claimevidence"
+        },
+        "events": {
+          "entitySetName": "abs_events",
+          "logicalName": "abs_event"
+        },
+        "requests": {
+          "entitySetName": "abs_requests",
+          "logicalName": "abs_request"
+        },
+        "programsettings": {
+          "entitySetName": "abs_programsettingses",
+          "logicalName": "abs_programsettings"
+        },
+        "appadmins": {
+          "entitySetName": "abs_appadmins",
+          "logicalName": "abs_appadmin"
+        }
+      },
+      "environmentVariableName": ""
+    }
+  }
+}

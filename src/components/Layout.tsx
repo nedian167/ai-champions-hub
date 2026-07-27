@@ -1,0 +1,89 @@
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { useAppData } from '../context/AppDataContext';
+import { Avatar } from './ui';
+
+const NAV: { to: string; label: string; icon: string }[] = [
+  { to: '/', label: 'Home', icon: '🏠' },
+  { to: '/champions', label: 'Champions', icon: '🧑\u200d🚀' },
+  { to: '/campaigns', label: 'Campaigns', icon: '📣' },
+  { to: '/activities', label: 'Activities', icon: '🎯' },
+  { to: '/events', label: 'Events', icon: '📅' },
+  { to: '/leaderboard', label: 'Leaderboard', icon: '🏆' },
+  { to: '/requests', label: 'Requests', icon: '📨' },
+  { to: '/customize', label: 'Customize', icon: '🎨' },
+  { to: '/settings', label: 'Settings', icon: '⚙️' },
+];
+
+const TITLES: Record<string, string> = {
+  '/': 'Home',
+  '/champions': 'Champions',
+  '/campaigns': 'Campaigns',
+  '/activities': 'Activities',
+  '/events': 'Events',
+  '/leaderboard': 'Leaderboard',
+  '/requests': 'Requests',
+  '/customize': 'Customize',
+  '/settings': 'Settings',
+};
+
+function CommunityButton() {
+  const { settings } = useAppData();
+  const url = settings?.abs_copilotcommunityurl;
+  if (!url) return null;
+  return (
+    <a className="community-btn" href={url} target="_blank" rel="noreferrer">
+      💬 Copilot Community
+    </a>
+  );
+}
+
+export default function Layout() {
+  const { currentUser, currentChampion, isProgramManager, isAppAdmin } = useAppData();
+  const loc = useLocation();
+  const base = '/' + (loc.pathname.split('/')[1] ?? '');
+  const title = TITLES[base] ?? 'AI Champions Hub';
+  const name = currentChampion?.crd49_displayname || currentUser?.fullName || 'Guest';
+  const role = isProgramManager ? 'Program Manager' : isAppAdmin ? 'App Admin' : 'Champion';
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <span className="brand-logo">🤖</span>
+          <span>AI Champions Hub</span>
+        </div>
+        <nav className="sidebar-nav">
+          {NAV.map((n) => (
+            <NavLink
+              key={n.to}
+              to={n.to}
+              end={n.to === '/'}
+              className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+            >
+              <span className="nav-icon">{n.icon}</span>
+              <span>{n.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+        <div className="sidebar-footer">Empowering AI adoption, one champion at a time.</div>
+      </aside>
+
+      <div className="main">
+        <header className="topbar">
+          <div className="topbar-title">{title}</div>
+          <div className="topbar-user">
+            <span className="role-badge">{role}</span>
+            <Avatar name={name} size={34} />
+            <span className="strong">{name}</span>
+          </div>
+        </header>
+        <main>
+          <div className="page">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+      <CommunityButton />
+    </div>
+  );
+}
