@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useAppData } from '../context/AppDataContext';
-import { ChampionsSvc, bind } from '../data/entities';
+import { ChampionsSvc, bind, type Abs_champions } from '../data/entities';
 import { Card, KpiCard, Pill, Avatar, EmptyState, SearchInput, Field } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
@@ -23,6 +23,15 @@ export default function ChampionsScreen() {
   const [deptFilter, setDeptFilter] = useState<string>('all');
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const [editing, setEditing] = useState<Abs_champions | null>(null);
+  const [editForm, setEditForm] = useState({
+    displayname: '', userid: '', department: '',
+    role: ChampionRole.Champion as number, status: ChampionStatus.Active as number,
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [removing, setRemoving] = useState<Abs_champions | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     displayname: '', userid: '', department: '',
@@ -68,6 +77,78 @@ export default function ChampionsScreen() {
       toast.error(e instanceof Error ? e.message : 'Failed to add champion.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  function openEdit(c: Abs_champions) {
+    setEditForm({
+      displayname: c.crd49_displayname ?? '',
+      userid: c.abs_userid ?? '',
+      department: c._crd49_department_value ?? '',
+      role: c.crd49_role,
+      status: c.crd49_status,
+    });
+    setEditing(c);
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    if (!editForm.displayname.trim() || !editForm.userid.trim() || !editForm.department) {
+      toast.error('Name, email and department are required.');
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const payload: Record<string, unknown> = {
+        crd49_displayname: editForm.displayname.trim(),
+        abs_userid: editForm.userid.trim(),
+        'crd49_Department@odata.bind': bind('department', editForm.department),
+        crd49_role: editForm.role,
+        crd49_status: editForm.status,
+      };
+      const res = await ChampionsSvc.update(editing.abs_championid, payload as never);
+      if (!res.success) throw new Error(res.error?.message ?? 'Update failed');
+      toast.success('Champion updated.');
+      setEditing(null);
+      await reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to update champion.');
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function toggleStatus(c: Abs_champions) {
+    const next = c.crd49_status === ChampionStatus.Inactive ? ChampionStatus.Active : ChampionStatus.Inactive;
+    setBusyId(c.abs_championid);
+    try {
+      const res = await ChampionsSvc.update(c.abs_championid, { crd49_status: next } as never);
+      if (!res.success) throw new Error(res.error?.message ?? 'Update failed');
+      toast.success(
+        next === ChampionStatus.Inactive
+          ? 'Champion disabled — app access revoked.'
+          : 'Champion enabled.',
+      );
+      await reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to update status.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function removeChampion() {
+    if (!removing) return;
+    setBusyId(removing.abs_championid);
+    try {
+      await ChampionsSvc.delete(removing.abs_championid);
+      toast.success('Champion removed.');
+      setRemoving(null);
+      await reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to remove champion.');
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -123,6 +204,26 @@ export default function ChampionsScreen() {
                 <span className="spacer" />
                 <span className="item-sub">Joined {formatDate(c.crd49_joineddate)}</span>
               </div>
+              {isAdmin && (
+                <div className="ec-actions">
+                  <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)}>✏️ Edit</button>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    disabled={busyId === c.abs_championid}
+                    onClick={() => toggleStatus(c)}
+                  >
+                    {c.crd49_status === ChampionStatus.Inactive ? '▶️ Enable' : '⏸️ Disable'}
+                  </button>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{ color: 'var(--red)' }}
+                    disabled={busyId === c.abs_championid}
+                    onClick={() => setRemoving(c)}
+                  >
+                    🗑️ Remove
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -164,6 +265,68 @@ export default function ChampionsScreen() {
               {optionsOf(ChampionStatusLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </Field>
+        </Modal>
+      )}
+
+      {editing && (
+        <Modal
+          title="Edit Champion"
+          onClose={() => setEditing(null)}
+          footer={
+            <>
+              <button className="btn btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
+              <button className="btn btn-primary" disabled={savingEdit} onClick={saveEdit}>{savingEdit ? 'Saving…' : 'Save Changes'}</button>
+            </>
+          }
+        >
+          <Field label="Display name">
+            <input className="input" value={editForm.displayname} onChange={(e) => setEditForm({ ...editForm, displayname: e.target.value })} placeholder="Ada Lovelace" />
+          </Field>
+          <Field label="User ID (email / UPN)">
+            <input className="input" value={editForm.userid} onChange={(e) => setEditForm({ ...editForm, userid: e.target.value })} placeholder="ada@contoso.com" />
+          </Field>
+          <div className="field-row">
+            <Field label="Department">
+              <select className="select" value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}>
+                <option value="">Select…</option>
+                {departments.map((d) => <option key={d.abs_departmentid} value={d.abs_departmentid}>{d.abs_name}</option>)}
+              </select>
+            </Field>
+            <Field label="Role">
+              <select className="select" value={editForm.role} onChange={(e) => setEditForm({ ...editForm, role: Number(e.target.value) })}>
+                <option value={ChampionRole.Champion}>Champion</option>
+                <option value={ChampionRole.ProgramManager}>Program Manager</option>
+              </select>
+            </Field>
+          </div>
+          <Field label="Status" help="Set to Inactive to disable this champion's access to the app.">
+            <select className="select" value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: Number(e.target.value) })}>
+              {optionsOf(ChampionStatusLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </Field>
+        </Modal>
+      )}
+
+      {removing && (
+        <Modal
+          title="Remove champion?"
+          onClose={() => setRemoving(null)}
+          footer={
+            <>
+              <button className="btn btn-secondary" onClick={() => setRemoving(null)}>Cancel</button>
+              <button className="btn btn-danger" disabled={busyId === removing.abs_championid} onClick={removeChampion}>
+                {busyId === removing.abs_championid ? 'Removing…' : 'Remove'}
+              </button>
+            </>
+          }
+        >
+          <p>
+            This permanently deletes <strong>{removing.crd49_displayname || removing.abs_userid}</strong> from
+            the Champions directory. This cannot be undone.
+          </p>
+          <p className="text-muted" style={{ fontSize: '0.86rem' }}>
+            To temporarily block access instead, use <strong>Disable</strong>.
+          </p>
         </Modal>
       )}
     </>

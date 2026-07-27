@@ -621,6 +621,18 @@ h4 {
   color: var(--text-muted);
   font-size: 0.82rem;
 }
+.ec-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.ec-actions .btn-sm {
+  padding: 5px 10px;
+  font-size: 0.8rem;
+}
 
 /* Campaign card with banner */
 .campaign-card {
