@@ -5,6 +5,7 @@ import { Card, Donut, KpiCard, Pill, Rank, EmptyState, Avatar } from '../compone
 import { ChampionStatus, CampaignStatus, ClaimStatus, RequestStatus, CampaignStatusLabel } from '../lib/enums';
 import { formatDate, firstName } from '../lib/format';
 import { isCampaignLive } from '../lib/campaignStatus';
+import { computeCampaignHealth } from '../lib/campaignHealth';
 import type { PillColor } from '../components/ui';
 
 function inMonth(iso: string | undefined, offset: number): boolean {
@@ -29,6 +30,7 @@ export default function HomeScreen() {
   const nav = useNavigate();
   const {
     champions, campaigns, claims, requests, currentUser, currentChampion, isAdmin, participations,
+    campaignActivities, campaignDepartments,
     championById, departmentById, activityById, pointsFor,
   } = useAppData();
 
@@ -67,10 +69,15 @@ export default function HomeScreen() {
     return idx >= 0 ? idx + 1 : null;
   }, [champions, pointsFor, myId]);
 
-  const totalPoints = useMemo(
-    () => approvedClaims.reduce((sum, c) => sum + (activityById.get(c._crd49_activity_value ?? '')?.crd49_points ?? 0), 0),
-    [approvedClaims, activityById],
-  );
+  // Program-wide campaign health (admin KPI) — RAG across live campaigns.
+  const health = useMemo(() => {
+    const input = { participations, campaignActivities, claims, campaignDepartments, champions };
+    const list = activeCampaigns.map((c) => computeCampaignHealth(c, input));
+    const green = list.filter((h) => h.level === 'green').length;
+    const amber = list.filter((h) => h.level === 'amber').length;
+    const red = list.filter((h) => h.level === 'red').length;
+    return { green, amber, red, total: list.length };
+  }, [activeCampaigns, participations, campaignActivities, claims, campaignDepartments, champions]);
 
   const topChampions = useMemo(
     () =>
@@ -178,13 +185,15 @@ export default function HomeScreen() {
             onClick={() => nav('/activities', { state: { tab: 'claims', claimStatus: ClaimStatus.Approved } })}
           />
           <KpiCard
-            label="Total Points Earned"
-            value={totalPoints.toLocaleString()}
-            sub="across all champions"
-            icon="⭐"
-            iconBg="var(--amber-soft)"
-            iconColor="var(--amber)"
-            onClick={() => nav('/leaderboard')}
+            label="Campaigns At Risk"
+            value={health.red}
+            sub={health.total
+              ? `${health.green} healthy · ${health.amber} watch · ${health.red} at risk`
+              : 'No live campaigns'}
+            icon="🩺"
+            iconBg={health.red ? 'var(--red-soft)' : health.amber ? 'var(--amber-soft)' : 'var(--green-soft)'}
+            iconColor={health.red ? 'var(--red)' : health.amber ? 'var(--amber)' : 'var(--green)'}
+            onClick={() => nav('/campaigns', { state: { tab: 'active' } })}
           />
         </div>
       )}

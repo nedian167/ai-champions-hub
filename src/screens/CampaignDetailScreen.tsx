@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
 import { CampaignsSvc, CampaignActivitiesSvc, CampaignParticipationsSvc, ActivitiesSvc, bind } from '../data/entities';
-import { Card, KpiCard, Pill, EmptyState, Tabs, Avatar, Field } from '../components/ui';
+import { Card, KpiCard, Pill, HealthBadge, EmptyState, Tabs, Avatar, Field } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { CampaignStatus, CampaignStatusLabel, ActivityType, ActivityTypeLabel, ValidationMode, ValidationModeLabel, optionsOf } from '../lib/enums';
@@ -10,6 +10,7 @@ import { formatDate, toDateInput } from '../lib/format';
 import {
   effectiveCampaignStatus, effectiveStatusColor, effectiveStatusLabel, isCampaignExpired, isCampaignLive,
 } from '../lib/campaignStatus';
+import { computeCampaignHealth } from '../lib/campaignHealth';
 
 type Tab = 'activities' | 'participants' | 'events';
 
@@ -17,7 +18,7 @@ export default function CampaignDetailScreen() {
   const { id } = useParams();
   const nav = useNavigate();
   const {
-    campaignById, championById, departmentById, activityById,
+    campaignById, championById, departmentById, activityById, champions, claims,
     campaignDepartments, campaignActivities, participations, events, currentChampion, isAdmin, reload,
   } = useAppData();
   const toast = useToast();
@@ -47,6 +48,13 @@ export default function CampaignDetailScreen() {
       .map((cd) => departmentById.get(cd._abs_department_value ?? '')?.abs_name)
       .filter(Boolean) as string[],
     [campaignDepartments, departmentById, id],
+  );
+
+  const health = useMemo(
+    () => (campaign
+      ? computeCampaignHealth(campaign, { participations, campaignActivities, claims, campaignDepartments, champions })
+      : null),
+    [campaign, participations, campaignActivities, claims, campaignDepartments, champions],
   );
 
   const acts = useMemo(
@@ -184,6 +192,9 @@ export default function CampaignDetailScreen() {
           <div className="row">
             <h1>{campaign.abs_name}</h1>
             <Pill color={effectiveStatusColor(eff)}>{effectiveStatusLabel[eff]}</Pill>
+            {isAdmin && health && (
+              <HealthBadge level={health.level} label={health.label} score={health.score} showScore title={health.reasons.join('\n')} />
+            )}
           </div>
           <div className="page-subtitle">{campaign.crd49_theme || 'Campaign'}</div>
         </div>

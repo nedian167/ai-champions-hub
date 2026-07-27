@@ -2,7 +2,7 @@ import { useMemo, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
 import { CampaignsSvc, CampaignDepartmentsSvc, bind, type Abs_campaigns } from '../data/entities';
-import { Card, KpiCard, Pill, EmptyState, Tabs, Field } from '../components/ui';
+import { Card, KpiCard, Pill, HealthBadge, EmptyState, Tabs, Field } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { CampaignStatus, CampaignStatusLabel, optionsOf } from '../lib/enums';
@@ -10,6 +10,7 @@ import { formatDate, toDateInput } from '../lib/format';
 import {
   effectiveCampaignStatus, effectiveStatusColor, effectiveStatusLabel, isCampaignExpired,
 } from '../lib/campaignStatus';
+import { computeCampaignHealth } from '../lib/campaignHealth';
 
 type Tab = 'active' | 'draft' | 'completed' | 'expired';
 
@@ -32,7 +33,8 @@ function bannerStyle(c: Abs_campaigns): CSSProperties {
 export default function CampaignsScreen() {
   const nav = useNavigate();
   const {
-    campaigns, departments, champions, campaignDepartments, participations, currentChampion, isAdmin, reload,
+    campaigns, departments, champions, campaignDepartments, participations,
+    campaignActivities, claims, currentChampion, isAdmin, reload,
   } = useAppData();
   const toast = useToast();
 
@@ -71,6 +73,13 @@ export default function CampaignsScreen() {
     }
     return m;
   }, [participations]);
+
+  const healthByCampaign = useMemo(() => {
+    const m = new Map<string, ReturnType<typeof computeCampaignHealth>>();
+    const input = { participations, campaignActivities, claims, campaignDepartments, champions };
+    for (const c of campaigns) m.set(c.abs_campaignid, computeCampaignHealth(c, input));
+    return m;
+  }, [campaigns, participations, campaignActivities, claims, campaignDepartments, champions]);
 
   const counts = {
     active: campaigns.filter((c) => effectiveCampaignStatus(c) === 'active').length,
@@ -189,6 +198,10 @@ export default function CampaignsScreen() {
                       🌐 {audience && audience.length ? audience.join(', ') : 'All Employees'}
                     </Pill>
                     <Pill color={effectiveStatusColor(eff)}>{effectiveStatusLabel[eff]}</Pill>
+                    {isAdmin && (() => {
+                      const h = healthByCampaign.get(c.abs_campaignid);
+                      return h ? <HealthBadge level={h.level} label={h.label} title={h.reasons.join('\n')} /> : null;
+                    })()}
                   </div>
                   {canEditBanner(c) && (
                     <button

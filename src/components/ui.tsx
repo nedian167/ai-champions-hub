@@ -25,6 +25,24 @@ export function Pill({ color, children }: { color: PillColor; children: ReactNod
   return <span className={`pill ${color}`}>{children}</span>;
 }
 
+/* ---------------- Health badge (RAG) ---------------- */
+export function HealthBadge({
+  level, label, score, title, showScore = false,
+}: {
+  level: 'green' | 'amber' | 'red' | 'gray';
+  label: string;
+  score?: number;
+  title?: string;
+  showScore?: boolean;
+}) {
+  return (
+    <span className={`health-badge ${level}`} title={title}>
+      <span className="health-dot" />
+      {label}{showScore && typeof score === 'number' ? ` · ${score}` : ''}
+    </span>
+  );
+}
+
 /* ---------------- KPI card ---------------- */
 export function KpiCard({
   label,
