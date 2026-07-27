@@ -34,6 +34,7 @@ export function KpiCard({
   iconColor,
   sub,
   delta,
+  onClick,
 }: {
   label: string;
   value: ReactNode;
@@ -42,9 +43,17 @@ export function KpiCard({
   iconColor?: string;
   sub?: ReactNode;
   delta?: number;
+  onClick?: () => void;
 }) {
   return (
-    <div className="kpi" style={{ '--kpi-accent': iconColor ?? 'var(--primary)' } as CSSProperties}>
+    <div
+      className={`kpi${onClick ? ' kpi-clickable' : ''}`}
+      style={{ '--kpi-accent': iconColor ?? 'var(--primary)' } as CSSProperties}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+    >
       <div className="kpi-top">
         <span className="kpi-label">{label}</span>
         {icon && (

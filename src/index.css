@@ -311,6 +311,18 @@ h4 {
   flex-direction: column;
   gap: 6px;
 }
+.kpi-clickable {
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.kpi-clickable:hover {
+  box-shadow: var(--shadow-lg, 0 6px 20px rgba(0, 0, 0, 0.12));
+  transform: translateY(-2px);
+}
+.kpi-clickable:focus-visible {
+  outline: 2px solid var(--kpi-accent, var(--primary));
+  outline-offset: 2px;
+}
 .kpi-top {
   display: flex;
   align-items: center;
