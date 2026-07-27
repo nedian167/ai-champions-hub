@@ -10,6 +10,14 @@
       "x-ms-dataverse-primary-id": "abs_programsettingsid",
       "x-ms-dataverse-primary-name": "abs_name",
       "properties": {
+        "abs_communityname": {
+          "type": "string",
+          "title": "Community Name",
+          "x-ms-dataverse-attribute": "abs_communityname",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "abs_CommunityName",
+          "maxLength": 200
+        },
         "abs_copilotcommunityurl": {
           "type": "string",
           "title": "Copilot Community URL",

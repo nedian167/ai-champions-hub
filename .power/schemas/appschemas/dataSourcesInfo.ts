@@ -162,8 +162,7 @@ export const dataSourcesInfo = {
             "name": "body",
             "in": "body",
             "required": true,
-            "type": "string",
-            "format": "binary"
+            "type": "object"
           },
           {
             "name": "Content-Type",
@@ -470,8 +469,7 @@ export const dataSourcesInfo = {
             "name": "top",
             "in": "query",
             "required": false,
-            "type": "integer",
-            "format": "int32"
+            "type": "integer"
           }
         ],
         "responseInfo": {
@@ -518,8 +516,7 @@ export const dataSourcesInfo = {
             "name": "top",
             "in": "query",
             "required": false,
-            "type": "integer",
-            "format": "int32"
+            "type": "integer"
           },
           {
             "name": "isSearchTermRequired",
@@ -662,8 +659,7 @@ export const dataSourcesInfo = {
             "name": "$top",
             "in": "query",
             "required": false,
-            "type": "integer",
-            "format": "int32"
+            "type": "integer"
           }
         ],
         "responseInfo": {
@@ -763,8 +759,7 @@ export const dataSourcesInfo = {
             "name": "Body",
             "in": "body",
             "required": false,
-            "type": "string",
-            "format": "binary"
+            "type": "object"
           },
           {
             "name": "ContentType",

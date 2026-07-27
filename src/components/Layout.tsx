@@ -31,10 +31,11 @@ const TITLES: Record<string, string> = {
 function CommunityButton() {
   const { settings } = useAppData();
   const url = settings?.abs_copilotcommunityurl;
+  const name = settings?.abs_communityname?.trim() || 'AI Champions Community';
   if (!url) return null;
   return (
     <a className="community-btn" href={url} target="_blank" rel="noreferrer">
-      💬 Copilot Community
+      💬 {name}
     </a>
   );
 }

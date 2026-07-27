@@ -16,6 +16,7 @@ export default function SettingsScreen() {
     selfNom: settings?.crd49_selfnominationenabled ?? false,
     approval: settings?.crd49_activityapprovalrequired ?? false,
     community: settings?.abs_copilotcommunityurl ?? '',
+    communityName: settings?.abs_communityname ?? '',
     sharepoint: settings?.crd49_sharepointurl ?? '',
   });
   const [savingCfg, setSavingCfg] = useState(false);
@@ -26,6 +27,7 @@ export default function SettingsScreen() {
       selfNom: settings?.crd49_selfnominationenabled ?? false,
       approval: settings?.crd49_activityapprovalrequired ?? false,
       community: settings?.abs_copilotcommunityurl ?? '',
+      communityName: settings?.abs_communityname ?? '',
       sharepoint: settings?.crd49_sharepointurl ?? '',
     });
   }, [settings]);
@@ -82,6 +84,7 @@ export default function SettingsScreen() {
         crd49_selfnominationenabled: cfg.selfNom,
         crd49_activityapprovalrequired: cfg.approval,
         abs_copilotcommunityurl: cfg.community.trim() || null,
+        abs_communityname: cfg.communityName.trim() || null,
         crd49_sharepointurl: cfg.sharepoint.trim() || null,
       };
       if (settings) {
@@ -202,7 +205,10 @@ export default function SettingsScreen() {
             <Toggle on={cfg.approval} onChange={(v) => setCfg({ ...cfg, approval: v })} />
           </div>
           <div className="divider" />
-          <Field label="Copilot Community URL" help="Shows a floating community button on every page.">
+          <Field label="AI Champions Community Name" help="Label shown on the floating community button.">
+            <input className="input" value={cfg.communityName} onChange={(e) => setCfg({ ...cfg, communityName: e.target.value })} placeholder="AI Champions Community" />
+          </Field>
+          <Field label="AI Champions Community URL" help="Shows a floating community button on every page.">
             <input className="input" value={cfg.community} onChange={(e) => setCfg({ ...cfg, community: e.target.value })} placeholder="https://…" />
           </Field>
           <Field label="SharePoint document library URL" help="Where champions upload evidence for claims.">
