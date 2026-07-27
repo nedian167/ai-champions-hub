@@ -4,7 +4,8 @@
 
 AI Champions Hub is delivered as a **fresh, self‑contained solution** — importing it into any
 Power Platform environment provisions the entire **Dataverse data model** (13 tables, option sets
-and relationships) and the **React Code App** that runs on top of it. Nothing is assumed to
+and relationships), **two ready-to-assign security roles**, and the **React Code App** that runs on
+top of it. Nothing is assumed to
 pre‑exist: you get the database, the app, and the connector wiring from scratch.
 
 The app helps a program run day to day: onboarding champions, launching learning campaigns,
@@ -20,7 +21,7 @@ triaging license/connector requests, reporting to leadership, and self‑brandin
 
 | Layer | Delivered as | Contents |
 |-------|--------------|----------|
-| **Data model** | `deploy/solutions/AIChampionsHubApp_managed.zip` (and `_unmanaged.zip`) | 13 Dataverse tables, option sets, relationships — publisher **ABSGSA**, prefix `abs` |
+| **Data model** | `deploy/solutions/AIChampionsHubApp_managed.zip` (and `_unmanaged.zip`) | 13 Dataverse tables, option sets, relationships **+ 2 ready-to-assign security roles** — publisher **ABSGSA**, prefix `abs` |
 | **Application** | This repository (Vite + React + TypeScript) | The full Code App, deployed with `pac code push` |
 | **Connector** | `power.config.json` | **Office 365 Users** (people picker) + the 13 Dataverse data sources |
 
@@ -253,10 +254,12 @@ erDiagram
 
 ## Key features
 
-- **Role gating.** The signed‑in user resolves to an `abs_champion` and/or `abs_appadmin` record.
-  `isAdmin = isProgramManager || isAppAdmin`. Admin‑only actions (managing champions, campaigns,
-  activities, claim approvals, events, request triage, reports and all of Settings) are hidden for
-  regular champions.
+- **Role gating.** Two layers work together. **In Dataverse**, the package ships two security
+  roles — **AI Champions Hub Users** and **AI Champions Hub Admins** (see Deploy) — that grant the
+  table privileges; assign them on import. **In the app**, the signed‑in user resolves to an
+  `abs_champion` and/or `abs_appadmin` record. `isAdmin = isProgramManager || isAppAdmin`.
+  Admin‑only actions (managing champions, campaigns, activities, claim approvals, events, request
+  triage, reports and all of Settings) are hidden for regular champions.
 - **Champion lifecycle & access control.** Admins can edit, **disable** (sets status Inactive) or
   remove a champion. A disabled champion is blocked at app startup by an access gate; admins are
   never locked out. Re‑enabling restores access.
@@ -305,6 +308,10 @@ npm run build
 pac code push
 ```
 
+The import **auto-creates two security roles** — **AI Champions Hub Users** (Create/Read/Write/
+Append/Append To on all 13 tables) and **AI Champions Hub Admins** (same **+ Delete**). Assign
+**Users** to champions and **Admins** to program managers / app admins; no manual role setup needed.
+
 Then sign in as an admin and complete first‑run setup in **Settings** (community name/URL,
 SharePoint evidence library URL, departments, admins, branding).
 
@@ -351,7 +358,7 @@ src/
 
 deploy/
   DEPLOYMENT.md          # Cross-tenant deployment guide
-  solutions/             # AIChampionsHubApp_managed.zip + _unmanaged.zip (schema only)
+  solutions/             # AIChampionsHubApp_managed.zip + _unmanaged.zip (13 tables + 2 security roles)
 ```
 
 ---
