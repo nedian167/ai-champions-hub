@@ -154,10 +154,10 @@ export default function CampaignsScreen() {
       </div>
 
       <div className="grid grid-kpi">
-        <KpiCard label="Active Campaigns" value={counts.active} icon="🚀" iconBg="var(--green-soft)" iconColor="var(--green)" />
-        <KpiCard label="Drafts" value={counts.draft} icon="🕑" iconBg="var(--gray-soft)" iconColor="var(--gray)" />
-        <KpiCard label="Expired" value={counts.expired} icon="⏰" iconBg="var(--amber-soft)" iconColor="var(--amber)" />
-        <KpiCard label="Completed" value={counts.completed} icon="✅" iconBg="var(--blue-soft)" iconColor="var(--blue)" />
+        <KpiCard label="Active Campaigns" value={counts.active} icon="🚀" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => setTab('active')} />
+        <KpiCard label="Drafts" value={counts.draft} icon="🕑" iconBg="var(--gray-soft)" iconColor="var(--gray)" onClick={() => setTab('draft')} />
+        <KpiCard label="Expired" value={counts.expired} icon="⏰" iconBg="var(--amber-soft)" iconColor="var(--amber)" onClick={() => setTab('expired')} />
+        <KpiCard label="Completed" value={counts.completed} icon="✅" iconBg="var(--blue-soft)" iconColor="var(--blue)" onClick={() => setTab('completed')} />
       </div>
 
       <div className="mt-24">
