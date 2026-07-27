@@ -806,6 +806,30 @@ h4 {
   margin-bottom: 16px;
   box-shadow: var(--shadow);
 }
+/* Expired-campaign treatments */
+.campaign-card.campaign-expired {
+  opacity: 0.7;
+  filter: saturate(0.7);
+}
+.campaign-card.campaign-expired:hover {
+  opacity: 1;
+  filter: none;
+}
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+.notice-warning {
+  border-color: var(--amber);
+  background: var(--amber-soft);
+}
+.notice-warning b { color: var(--amber); }
 .points-badge {
   background: var(--primary-soft);
   color: var(--primary);

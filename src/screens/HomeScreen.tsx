@@ -4,6 +4,7 @@ import { useAppData } from '../context/AppDataContext';
 import { Card, Donut, KpiCard, Pill, Rank, EmptyState, Avatar } from '../components/ui';
 import { ChampionStatus, CampaignStatus, ClaimStatus, RequestStatus, CampaignStatusLabel } from '../lib/enums';
 import { formatDate, firstName } from '../lib/format';
+import { isCampaignLive } from '../lib/campaignStatus';
 import type { PillColor } from '../components/ui';
 
 function inMonth(iso: string | undefined, offset: number): boolean {
@@ -32,7 +33,7 @@ export default function HomeScreen() {
   } = useAppData();
 
   const activeChampions = champions.filter((c) => c.crd49_status === ChampionStatus.Active);
-  const activeCampaigns = campaigns.filter((c) => c.crd49_status === CampaignStatus.Active);
+  const activeCampaigns = campaigns.filter((c) => isCampaignLive(c));
   const approvedClaims = claims.filter((c) => c.crd49_status === ClaimStatus.Approved);
   const pendingClaims = claims.filter((c) => c.crd49_status === ClaimStatus.Pending);
   const openRequests = requests.filter(

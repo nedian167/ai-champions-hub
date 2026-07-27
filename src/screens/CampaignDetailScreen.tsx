@@ -7,7 +7,9 @@ import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { CampaignStatus, CampaignStatusLabel, ActivityTypeLabel, optionsOf } from '../lib/enums';
 import { formatDate, toDateInput } from '../lib/format';
-import { campaignStatusColor } from './HomeScreen';
+import {
+  effectiveCampaignStatus, effectiveStatusColor, effectiveStatusLabel, isCampaignExpired,
+} from '../lib/campaignStatus';
 
 type Tab = 'activities' | 'participants' | 'events';
 
@@ -87,6 +89,27 @@ export default function CampaignDetailScreen() {
 
   const owner = championById.get(campaign._crd49_campaignowner_value ?? '');
   const canEdit = isAdmin || (!!currentChampion && campaign._crd49_campaignowner_value === currentChampion.abs_championid);
+  const eff = effectiveCampaignStatus(campaign);
+  const expired = isCampaignExpired(campaign);
+
+  async function reactivate() {
+    setSaving(true);
+    try {
+      const newEnd = new Date();
+      newEnd.setDate(newEnd.getDate() + 30);
+      const res = await CampaignsSvc.update(campaign!.abs_campaignid, {
+        crd49_status: CampaignStatus.Active,
+        crd49_enddate: newEnd.toISOString(),
+      } as never);
+      if (!res.success) throw new Error(res.error?.message ?? 'Update failed');
+      toast.success(`Campaign reactivated — new end date ${formatDate(newEnd.toISOString())}.`);
+      await reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to reactivate campaign.');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <>
@@ -103,12 +126,33 @@ export default function CampaignDetailScreen() {
         <div>
           <div className="row">
             <h1>{campaign.abs_name}</h1>
-            <Pill color={campaignStatusColor(campaign.crd49_status)}>{CampaignStatusLabel[campaign.crd49_status]}</Pill>
+            <Pill color={effectiveStatusColor(eff)}>{effectiveStatusLabel[eff]}</Pill>
           </div>
           <div className="page-subtitle">{campaign.crd49_theme || 'Campaign'}</div>
         </div>
         {canEdit && <button className="btn btn-secondary" onClick={() => setEditing(true)}>✏️ Edit</button>}
       </div>
+
+      {expired && (
+        <div className="notice notice-warning" role="status">
+          <div className="center-col spacer">
+            <b>⏰ This campaign is inactive</b>
+            <span className="item-sub">
+              It ended on {formatDate(campaign.crd49_enddate)}. {canEdit
+                ? 'Extend the end date to a future date to reactivate it.'
+                : 'Contact a program manager to reactivate it.'}
+            </span>
+          </div>
+          {canEdit && (
+            <div className="row">
+              <button className="btn btn-secondary btn-sm" onClick={() => setEditing(true)}>Change end date</button>
+              <button className="btn btn-primary btn-sm" disabled={saving} onClick={reactivate}>
+                {saving ? 'Reactivating…' : 'Reactivate +30 days'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-kpi">
         <KpiCard label="Activities" value={acts.length} icon="🎯" iconBg="var(--green-soft)" iconColor="var(--green)" />
