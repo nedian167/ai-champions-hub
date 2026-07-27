@@ -1114,6 +1114,9 @@ h4 {
 .settings-credit a {
   color: inherit;
 }
+.settings-credit-label {
+  font-weight: 600;
+}
 .loading-screen {
   display: grid;
   place-items: center;

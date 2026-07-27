@@ -75,7 +75,7 @@ export default function SettingsScreen() {
 
   const credit = (
     <div className="settings-credit">
-      Developed by: Zafar Ul Islam (<a href="mailto:zafaru@microsoft.com">zafaru@microsoft.com</a>)
+      <span className="settings-credit-label">Developed by:</span> Zafar Ul Islam (<a href="mailto:zafaru@microsoft.com">zafaru@microsoft.com</a>)
     </div>
   );
 
