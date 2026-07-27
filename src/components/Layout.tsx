@@ -69,7 +69,12 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="sidebar-footer">Empowering AI adoption, one champion at a time.</div>
+        <div className="sidebar-footer">
+          <div className="sidebar-slogan">Empowering AI adoption, one champion at a time.</div>
+          <div className="sidebar-credit">
+            <span className="sidebar-credit-label">Developed by:</span> Zafar Ul Islam (<a href="mailto:zafaru@microsoft.com">zafaru@microsoft.com</a>)
+          </div>
+        </div>
       </aside>
 
       <div className="main">

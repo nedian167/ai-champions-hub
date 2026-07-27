@@ -39,6 +39,7 @@ export default function ActivitiesScreen() {
     () => ((location.state as { tab?: Tab } | null)?.tab === 'claims' ? 'claims' : 'activities'),
   );
   const [typeFilter, setTypeFilter] = useState<number | 'all'>('all');
+  const [campaignFilter, setCampaignFilter] = useState<string>('all');
   const [claimStatusFilter, setClaimStatusFilter] = useState<number | 'all'>(
     () => {
       const s = (location.state as { claimStatus?: number } | null)?.claimStatus;
@@ -67,7 +68,14 @@ export default function ActivitiesScreen() {
     [approvedClaims, activityById],
   );
 
-  const shownActivities = activities.filter((a) => typeFilter === 'all' || a.crd49_activitytype === typeFilter);
+  const shownActivities = activities.filter((a) => {
+    if (typeFilter !== 'all' && a.crd49_activitytype !== typeFilter) return false;
+    if (campaignFilter !== 'all') {
+      const linkedIds = campaignIdsForActivity(a.abs_activityid, campaignActivities);
+      if (!linkedIds.includes(campaignFilter)) return false;
+    }
+    return true;
+  });
 
   // Campaigns the current champion has joined that are still live — these unlock activities.
   const joinedLiveCampaigns = useMemo(
@@ -299,6 +307,12 @@ export default function ActivitiesScreen() {
               <option value="all">All Types</option>
               {optionsOf(ActivityTypeLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+            {isAdmin && (
+              <select className="select" style={{ maxWidth: 240 }} value={campaignFilter} onChange={(e) => setCampaignFilter(e.target.value)}>
+                <option value="all">All Campaigns</option>
+                {campaigns.map((c) => <option key={c.abs_campaignid} value={c.abs_campaignid}>{c.abs_name}{isCampaignLive(c) ? '' : ' (inactive)'}</option>)}
+              </select>
+            )}
           </div>
           {visibleActivities.length === 0 ? (
             <Card>

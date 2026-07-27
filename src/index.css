@@ -183,6 +183,20 @@ h4 {
   font-size: 0.82rem;
   color: var(--sidebar-fg);
 }
+.sidebar-credit {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.72rem;
+  color: var(--sidebar-fg);
+  opacity: 0.75;
+}
+.sidebar-credit-label {
+  font-weight: 600;
+}
+.sidebar-credit a {
+  color: inherit;
+}
 
 .main {
   flex: 1;
