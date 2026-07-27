@@ -59,6 +59,7 @@ export default function ActivitiesScreen() {
 
   const myPoints = pointsFor(currentChampion?.abs_championid);
   const myClaims = claims.filter((c) => c._crd49_champion_value === currentChampion?.abs_championid);
+  const isChampionView = !!currentChampion && !isAdmin;
   const pendingClaims = claims.filter((c) => c.crd49_status === ClaimStatus.Pending);
   const approvedClaims = claims.filter((c) => c.crd49_status === ClaimStatus.Approved);
   const totalPoints = useMemo(
@@ -254,13 +255,21 @@ export default function ActivitiesScreen() {
       </div>
 
       <div className="grid grid-kpi">
-        <KpiCard label="Your Points" value={myPoints} icon="⭐" iconBg="var(--amber-soft)" iconColor="var(--amber)" onClick={() => goClaims(ClaimStatus.Approved)} />
-        <KpiCard label="Your Completed" value={myClaims.filter((c) => c.crd49_status === ClaimStatus.Approved).length} icon="✅" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => goClaims(ClaimStatus.Approved)} />
-        <KpiCard label="Your Pending" value={myClaims.filter((c) => c.crd49_status === ClaimStatus.Pending).length} icon="⏳" iconBg="var(--amber-soft)" iconColor="var(--amber)" onClick={() => goClaims(ClaimStatus.Pending)} />
-        <KpiCard label="Total Activities" value={activities.length} icon="🎯" iconBg="var(--blue-soft)" iconColor="var(--blue)" onClick={() => setTab('activities')} />
-        <KpiCard label="Total Points" value={totalPoints} icon="💯" iconBg="var(--primary-soft)" iconColor="var(--primary)" onClick={() => goClaims(ClaimStatus.Approved)} />
-        <KpiCard label="Pending Claims" value={pendingClaims.length} icon="📥" iconBg="var(--purple-soft)" iconColor="var(--purple)" onClick={() => goClaims(ClaimStatus.Pending)} />
-        <KpiCard label="Approved Claims" value={approvedClaims.length} icon="🏅" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => goClaims(ClaimStatus.Approved)} />
+        {isChampionView ? (
+          <>
+            <KpiCard label="Your Points" value={myPoints} icon="⭐" iconBg="var(--amber-soft)" iconColor="var(--amber)" onClick={() => goClaims(ClaimStatus.Approved)} />
+            <KpiCard label="Your Completed" value={myClaims.filter((c) => c.crd49_status === ClaimStatus.Approved).length} icon="✅" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => goClaims(ClaimStatus.Approved)} />
+            <KpiCard label="Your Pending" value={myClaims.filter((c) => c.crd49_status === ClaimStatus.Pending).length} icon="⏳" iconBg="var(--amber-soft)" iconColor="var(--amber)" onClick={() => goClaims(ClaimStatus.Pending)} />
+            <KpiCard label="Available Activities" value={accessibleActivityIds.size} icon="🎯" iconBg="var(--blue-soft)" iconColor="var(--blue)" onClick={() => setTab('activities')} />
+          </>
+        ) : (
+          <>
+            <KpiCard label="Total Activities" value={activities.length} icon="🎯" iconBg="var(--blue-soft)" iconColor="var(--blue)" onClick={() => setTab('activities')} />
+            <KpiCard label="Total Points" value={totalPoints} icon="💯" iconBg="var(--primary-soft)" iconColor="var(--primary)" onClick={() => goClaims(ClaimStatus.Approved)} />
+            <KpiCard label="Pending Claims" value={pendingClaims.length} icon="📥" iconBg="var(--purple-soft)" iconColor="var(--purple)" onClick={() => goClaims(ClaimStatus.Pending)} />
+            <KpiCard label="Approved Claims" value={approvedClaims.length} icon="🏅" iconBg="var(--green-soft)" iconColor="var(--green)" onClick={() => goClaims(ClaimStatus.Approved)} />
+          </>
+        )}
       </div>
 
       <div className="mt-24">
