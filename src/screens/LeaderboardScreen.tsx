@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
 import { Card, Tabs, Rank, Avatar, EmptyState, Pill } from '../components/ui';
 import { CampaignStatusLabel } from '../lib/enums';
@@ -14,6 +15,7 @@ export default function LeaderboardScreen() {
 
   const [tab, setTab] = useState<Tab>('champions');
   const [deptFilter, setDeptFilter] = useState<string>('all');
+  const navigate = useNavigate();
 
   const rankedChampions = useMemo(
     () => champions
@@ -34,7 +36,7 @@ export default function LeaderboardScreen() {
       totals.set(dept, cur);
     }
     return [...totals.entries()]
-      .map(([id, v]) => ({ name: departmentById.get(id)?.abs_name ?? '—', ...v }))
+      .map(([id, v]) => ({ id, name: departmentById.get(id)?.abs_name ?? '—', ...v }))
       .sort((a, b) => b.pts - a.pts);
   }, [champions, pointsFor, departmentById]);
 
@@ -103,7 +105,14 @@ export default function LeaderboardScreen() {
           {rankedDepartments.length === 0 ? <EmptyState icon="🏢" title="No department data" /> : (
             <div className="list">
               {rankedDepartments.map((d, i) => (
-                <div className="list-item" key={d.name}>
+                <div
+                  className="list-item clickable"
+                  key={d.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => { setDeptFilter(d.id); setTab('champions'); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDeptFilter(d.id); setTab('champions'); } }}
+                >
                   <Rank n={i + 1} />
                   <div className="center-col spacer">
                     <span className="item-title">{d.name}</span>
@@ -122,7 +131,14 @@ export default function LeaderboardScreen() {
           {rankedCampaigns.length === 0 ? <EmptyState icon="📣" title="No campaigns" /> : (
             <div className="list">
               {rankedCampaigns.map((r, i) => (
-                <div className="list-item" key={r.c.abs_campaignid}>
+                <div
+                  className="list-item clickable"
+                  key={r.c.abs_campaignid}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(`/campaigns/${r.c.abs_campaignid}`)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/campaigns/${r.c.abs_campaignid}`); } }}
+                >
                   <Rank n={i + 1} />
                   <div className="center-col spacer">
                     <span className="item-title">{r.c.abs_name}</span>
