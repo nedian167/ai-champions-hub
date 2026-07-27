@@ -184,9 +184,9 @@ h4 {
   color: var(--sidebar-fg);
 }
 .sidebar-credit {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
   font-size: 0.72rem;
   color: var(--sidebar-fg);
   opacity: 0.75;
