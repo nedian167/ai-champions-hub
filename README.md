@@ -10,6 +10,23 @@ triaging license/connector requests, and configuring the program.
 
 ---
 
+## Screenshots
+
+| | |
+|---|---|
+| **Home** — KPI cards (colored accent borders), pending work, completion donut, top champions | ![Home](docs/screenshots/01-home.png) |
+| **Champions** — filters + admin edit / disable / remove actions per card | ![Champions](docs/screenshots/02-champions.png) |
+| **Campaigns** — banner-image cards grouped by status | ![Campaigns](docs/screenshots/03-campaigns.png) |
+| **Campaign detail** — banner header, overview, audience & activity tabs | ![Campaign detail](docs/screenshots/10-campaign-detail.png) |
+| **Activities** — activity catalog + claims with evidence & approve/reject | ![Activities](docs/screenshots/04-activities.png) |
+| **Events** — month calendar + upcoming list | ![Events](docs/screenshots/05-events.png) |
+| **Leaderboard** — champions / departments / campaigns ranking | ![Leaderboard](docs/screenshots/06-leaderboard.png) |
+| **Requests** — KPIs, filters, submit + triage | ![Requests](docs/screenshots/07-requests.png) |
+| **Customize** — per-user Light/Dark, font family & size with live preview | ![Customize](docs/screenshots/08-customize.png) |
+| **Settings** — program config, app admins & departments CRUD | ![Settings](docs/screenshots/09-settings.png) |
+
+---
+
 ## Tech stack
 
 - **Vite 7** + **React 19** + **TypeScript** (strict)
@@ -42,10 +59,10 @@ triaging license/connector requests, and configuring the program.
 
 | Route | Screen | Highlights |
 |-------|--------|------------|
-| `/` | Home | KPIs with month-over-month deltas, pending claims, open requests, completion donut, top champions, recent activity |
-| `/champions` | Champions | KPIs, status/department/search filters, add-champion (admin) |
-| `/campaigns` | Campaigns | active/draft/completed tabs, audience + participant counts, new campaign (admin) |
-| `/campaigns/:id` | Campaign detail | overview, audience, activities/participants/events tabs, edit (admin) |
+| `/` | Home | KPI cards with colored accent borders + month-over-month deltas, pending claims, open requests, completion donut, top champions, recent activity |
+| `/champions` | Champions | KPIs, status/department/search filters, add-champion, and per-card admin actions: **edit**, **disable/enable** (disable revokes app access), **remove** |
+| `/campaigns` | Campaigns | banner-image cards in active/draft/completed tabs, audience + participant counts, new campaign (admin) |
+| `/campaigns/:id` | Campaign detail | banner header, overview, audience, activities/participants/events tabs, edit (admin) |
 | `/activities` | Activities | activity catalog + claims tabs, new activity (admin), claim w/ evidence upload, approve/reject |
 | `/events` | Events | month calendar + upcoming list, new event (admin) |
 | `/leaderboard` | Leaderboard | champions / departments / campaigns ranking, department filter |
@@ -81,6 +98,10 @@ src/
 `abs_appadmin` record. `isAdmin = isProgramManager || isAppAdmin`. Admin-only actions (add champion,
 create/edit campaign, create activity, approve/reject claims, create event, triage requests, all of
 Settings) are hidden for regular champions.
+
+**Champion management & access control.** Admins can edit a champion, **disable** them
+(sets status to Inactive), or remove them. A disabled champion is blocked at app startup by an
+access gate — admins are never locked out. Re-enabling restores access.
 
 **Points & leaderboard.** Points come from **Approved** claims joined to `activity.crd49_points`
 (`pointsByChampion` / `pointsFor` in the context), falling back to the stored
