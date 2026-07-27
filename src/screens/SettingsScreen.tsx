@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import {
   ProgramSettingsSvc, AppAdminsSvc, DepartmentsSvc,
@@ -20,9 +20,19 @@ export default function SettingsScreen() {
   });
   const [savingCfg, setSavingCfg] = useState(false);
 
+  // Keep the form in sync with the persisted settings record (after load / reload).
+  useEffect(() => {
+    setCfg({
+      selfNom: settings?.crd49_selfnominationenabled ?? false,
+      approval: settings?.crd49_activityapprovalrequired ?? false,
+      community: settings?.abs_copilotcommunityurl ?? '',
+      sharepoint: settings?.crd49_sharepointurl ?? '',
+    });
+  }, [settings]);
+
   const [showAdmin, setShowAdmin] = useState(false);
   const [adminForm, setAdminForm] = useState({ userid: '', displayname: '' });
-  const [deptModal, setDeptModal] = useState<{ id?: string; name: string; description: string } | null>(null);
+  const [deptModal, setDeptModal] = useState<{ id?: string; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   if (!isAdmin) {
@@ -30,16 +40,22 @@ export default function SettingsScreen() {
   }
 
   async function saveConfig() {
-    if (!settings) { toast.error('No program settings record found.'); return; }
     setSavingCfg(true);
     try {
-      const res = await ProgramSettingsSvc.update(settings.abs_programsettingsid, {
+      const fields = {
         crd49_selfnominationenabled: cfg.selfNom,
         crd49_activityapprovalrequired: cfg.approval,
-        abs_copilotcommunityurl: cfg.community.trim() || undefined,
-        crd49_sharepointurl: cfg.sharepoint.trim() || undefined,
-      } as never);
-      if (!res.success) throw new Error(res.error?.message ?? 'Update failed');
+        abs_copilotcommunityurl: cfg.community.trim() || null,
+        crd49_sharepointurl: cfg.sharepoint.trim() || null,
+      };
+      if (settings) {
+        const res = await ProgramSettingsSvc.update(settings.abs_programsettingsid, fields as never);
+        if (!res.success) throw new Error(res.error?.message ?? 'Update failed');
+      } else {
+        // No settings record yet — create one so configuration always persists.
+        const res = await ProgramSettingsSvc.create({ abs_name: 'Program Settings', ...fields } as never);
+        if (!res.success) throw new Error(res.error?.message ?? 'Create failed');
+      }
       toast.success('Settings saved.');
       await reload();
     } catch (e) {
@@ -91,13 +107,11 @@ export default function SettingsScreen() {
       if (deptModal.id) {
         const res = await DepartmentsSvc.update(deptModal.id, {
           abs_name: deptModal.name.trim(),
-          crd49_description: deptModal.description.trim() || undefined,
         } as never);
         if (!res.success) throw new Error(res.error?.message ?? 'Update failed');
       } else {
         const res = await DepartmentsSvc.create({
           abs_name: deptModal.name.trim(),
-          crd49_description: deptModal.description.trim() || undefined,
         } as never);
         if (!res.success) throw new Error(res.error?.message ?? 'Create failed');
       }
@@ -181,7 +195,7 @@ export default function SettingsScreen() {
       <Card
         className="mt-24"
         title={`🏢 Departments (${departments.length})`}
-        action={<button className="btn btn-primary btn-sm" onClick={() => setDeptModal({ name: '', description: '' })}>➕ Add Department</button>}
+        action={<button className="btn btn-primary btn-sm" onClick={() => setDeptModal({ name: '' })}>➕ Add Department</button>}
       >
         {departments.length === 0 ? (
           <EmptyState icon="🏢" title="No departments" />
@@ -191,9 +205,8 @@ export default function SettingsScreen() {
               <div className="list-item" key={d.abs_departmentid}>
                 <div className="center-col spacer">
                   <span className="item-title">{d.abs_name}</span>
-                  <span className="item-sub">{d.crd49_description || '—'}</span>
                 </div>
-                <button className="btn btn-secondary btn-sm" onClick={() => setDeptModal({ id: d.abs_departmentid, name: d.abs_name, description: d.crd49_description ?? '' })}>Edit</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setDeptModal({ id: d.abs_departmentid, name: d.abs_name })}>Edit</button>
                 <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => removeDept(d.abs_departmentid)}>Delete</button>
               </div>
             ))}
@@ -246,8 +259,7 @@ export default function SettingsScreen() {
             </>
           }
         >
-          <Field label="Name"><input className="input" value={deptModal.name} onChange={(e) => setDeptModal({ ...deptModal, name: e.target.value })} /></Field>
-          <Field label="Description"><textarea className="textarea" value={deptModal.description} onChange={(e) => setDeptModal({ ...deptModal, description: e.target.value })} /></Field>
+          <Field label="Name"><input className="input" value={deptModal.name} onChange={(e) => setDeptModal({ ...deptModal, name: e.target.value })} autoFocus /></Field>
         </Modal>
       )}
     </>
