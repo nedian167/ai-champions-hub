@@ -10,6 +10,14 @@
       "x-ms-dataverse-primary-id": "abs_programsettingsid",
       "x-ms-dataverse-primary-name": "abs_name",
       "properties": {
+        "abs_brandcolor": {
+          "type": "string",
+          "title": "Brand Color",
+          "x-ms-dataverse-attribute": "abs_brandcolor",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "abs_BrandColor",
+          "maxLength": 30
+        },
         "abs_communityname": {
           "type": "string",
           "title": "Community Name",

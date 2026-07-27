@@ -7,6 +7,7 @@ import { Card, Field, Toggle, EmptyState, Avatar, Pill } from '../components/ui'
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { formatDate } from '../lib/format';
+import { BRAND_PRESETS, DEFAULT_BRAND, normalizeBrand, applyBrand } from '../lib/branding';
 
 export default function SettingsScreen() {
   const { settings, appAdmins, champions, departments, isAdmin, currentUser, reload } = useAppData();
@@ -18,6 +19,7 @@ export default function SettingsScreen() {
     community: settings?.abs_copilotcommunityurl ?? '',
     communityName: settings?.abs_communityname ?? '',
     sharepoint: settings?.crd49_sharepointurl ?? '',
+    brand: normalizeBrand(settings?.abs_brandcolor) ?? DEFAULT_BRAND,
   });
   const [savingCfg, setSavingCfg] = useState(false);
 
@@ -29,8 +31,18 @@ export default function SettingsScreen() {
       community: settings?.abs_copilotcommunityurl ?? '',
       communityName: settings?.abs_communityname ?? '',
       sharepoint: settings?.crd49_sharepointurl ?? '',
+      brand: normalizeBrand(settings?.abs_brandcolor) ?? DEFAULT_BRAND,
     });
   }, [settings]);
+
+  // Revert any unsaved live brand preview when leaving the screen.
+  useEffect(() => () => applyBrand(settings?.abs_brandcolor), [settings?.abs_brandcolor]);
+
+  // Live-preview a brand color across the whole app as the admin picks it.
+  function previewBrand(hex: string) {
+    setCfg((c) => ({ ...c, brand: hex }));
+    applyBrand(hex);
+  }
 
   const [showAdmin, setShowAdmin] = useState(false);
   const [elevateId, setElevateId] = useState('');
@@ -97,6 +109,7 @@ export default function SettingsScreen() {
         abs_copilotcommunityurl: cfg.community.trim() || null,
         abs_communityname: cfg.communityName.trim() || null,
         crd49_sharepointurl: cfg.sharepoint.trim() || null,
+        abs_brandcolor: normalizeBrand(cfg.brand) === DEFAULT_BRAND ? null : normalizeBrand(cfg.brand),
       };
       if (settings) {
         const res = await ProgramSettingsSvc.update(settings.abs_programsettingsid, fields as never);
@@ -274,6 +287,68 @@ export default function SettingsScreen() {
             ))}
           </div>
         )}
+      </Card>
+
+      <Card
+        className="mt-24"
+        title="🎨 App Theme & Branding"
+        action={<button className="btn btn-primary btn-sm" disabled={savingCfg} onClick={saveConfig}>{savingCfg ? 'Saving…' : 'Save'}</button>}
+      >
+        <p className="item-sub" style={{ marginTop: 0 }}>
+          Choose a brand color to recolor buttons, links, highlights and the active navigation across the whole app for every user.
+        </p>
+        <div className="brand-swatches">
+          {BRAND_PRESETS.map((p) => {
+            const active = normalizeBrand(cfg.brand) === p.color;
+            return (
+              <button
+                type="button"
+                key={p.key}
+                className={`brand-swatch${active ? ' active' : ''}`}
+                style={{ background: p.color }}
+                title={p.label}
+                aria-label={p.label}
+                onClick={() => previewBrand(p.color)}
+              >
+                {active && <span className="brand-swatch-check">✓</span>}
+              </button>
+            );
+          })}
+        </div>
+        <div className="divider" />
+        <div className="brand-custom-row">
+          <Field label="Custom brand color" help="Pick any color to match your organization's branding.">
+            <div className="brand-custom-inputs">
+              <input
+                type="color"
+                className="brand-color-input"
+                value={normalizeBrand(cfg.brand) ?? DEFAULT_BRAND}
+                onChange={(e) => previewBrand(e.target.value)}
+              />
+              <input
+                className="input"
+                value={cfg.brand}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCfg((c) => ({ ...c, brand: v }));
+                  const norm = normalizeBrand(v);
+                  if (norm) applyBrand(norm);
+                }}
+                placeholder="#5b5bd6"
+                style={{ maxWidth: 140 }}
+              />
+            </div>
+          </Field>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            disabled={normalizeBrand(cfg.brand) === DEFAULT_BRAND}
+            onClick={() => previewBrand(DEFAULT_BRAND)}
+          >
+            Reset to default
+          </button>
+        </div>
+        <p className="item-sub">Changes preview instantly — click <strong>Save</strong> to apply them for everyone.</p>
       </Card>
 
       {showAdmin && (
