@@ -192,20 +192,29 @@ export default function ActivitiesScreen() {
       } as never);
       if (!res.success || !res.data) throw new Error(res.error?.message ?? 'Claim failed');
 
+      let evidenceFailed = false;
       if (claimForm.evidenceurl.trim()) {
-        await ClaimEvidencesSvc.create({
+        const evRes = await ClaimEvidencesSvc.create({
           abs_name: 'Evidence',
           'abs_ActivityClaim@odata.bind': bind('activityclaim', res.data.abs_activityclaimid),
           abs_evidenceurl: claimForm.evidenceurl.trim(),
           abs_uploadeddate: new Date().toISOString(),
           abs_notes: claimForm.notes.trim() || undefined,
         } as never);
+        if (!evRes.success) {
+          evidenceFailed = true;
+          console.error('Evidence create failed:', evRes.error);
+        }
       }
 
       if (status === ClaimStatus.Approved) {
         await bumpPoints(currentChampion.abs_championid, claimFor.crd49_points ?? 0);
       }
-      toast.success(selfClaimed ? 'Activity claimed and approved!' : 'Claim submitted for approval.');
+      if (evidenceFailed) {
+        toast.error('Claim saved, but the evidence link could not be attached. Please try re-submitting the evidence.');
+      } else {
+        toast.success(selfClaimed ? 'Activity claimed and approved!' : 'Claim submitted for approval.');
+      }
       setClaimFor(null);
       setClaimForm({ campaign: '', notes: '', evidenceurl: '' });
       await reload();
