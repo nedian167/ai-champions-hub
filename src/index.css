@@ -359,6 +359,15 @@ h4 {
   font-weight: 800;
   line-height: 1.1;
 }
+.kpi-value-text {
+  display: block;
+  font-size: 1.15rem;
+  line-height: 1.25;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
 .kpi-sub {
   font-size: 0.8rem;
   color: var(--text-faint);
