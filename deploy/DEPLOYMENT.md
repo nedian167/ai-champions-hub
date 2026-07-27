@@ -60,18 +60,23 @@ This creates the tables below (publisher **ABSGSA**, prefix `abs`):
 `abs_campaignactivity`, `abs_campaignparticipation`, `abs_activity`, `abs_activityclaim`,
 `abs_claimevidence`, `abs_event`, `abs_request`, `abs_programsettings`, `abs_appadmin`.
 
-### Grant table access (security role)
+### Grant table access (security roles ship in the package)
 
-The package ships the **schema only**, not a security role. App users need Dataverse privileges
-on the 13 tables. Either:
+The solution **ships two custom security roles**, so importing it in a new tenant **auto-creates
+them** — you do **not** create roles by hand. Both grant privileges at **Organization** depth on
+all 13 `abs_` tables:
 
-- **Simplest:** assign users a role that already grants org-wide read/write (e.g. a custom role,
-  or `Basic User` extended with these tables), **or**
-- **Recommended:** create a custom security role (e.g. *AI Champions Hub Users*) granting
-  **Create / Read / Write / Append / Append To** on all 13 tables (add **Delete** for admins),
-  then assign it to your champions and program managers.
+| Role | Privileges on all 13 tables | Assign to |
+| --- | --- | --- |
+| **AI Champions Hub Users** | Create · Read · Write · Append · Append To | Champions |
+| **AI Champions Hub Admins** | Create · Read · Write · Append · Append To · **Delete** | Program managers / app admins |
 
-> A user who signs in without table read access will see an empty/error state — this is a
+After import (and **Publish all customizations**), assign the roles in
+**Power Platform admin center → Environment → Settings → Users + permissions → Users** (or the
+classic *Manage Roles* dialog): give **AI Champions Hub Users** to champions and **AI Champions Hub
+Admins** to program managers and app admins.
+
+> A user who signs in without one of these roles will see an empty/error state — this is a
 > permissions issue, not an app bug.
 
 ---
@@ -131,7 +136,7 @@ Then add champions (**Champions → Add Champion**) and create your first campai
 | Symptom | Fix |
 |---------|-----|
 | Import fails on missing dependency | Use the **managed** zip on a clean env; ensure the env has Dataverse. |
-| App loads but lists are empty | Assign the user a security role with read access to the `abs_` tables (Part 1). |
+| App loads but lists are empty | Assign the signed-in user one of the shipped roles — **AI Champions Hub Users** (champions) or **AI Champions Hub Admins** (admins) — see Part 1. |
 | People picker returns nothing | The Office 365 Users connection is missing/expired — recreate it and re-run step 2. |
-| Evidence links won't save | Set a valid **SharePoint document library URL** in Settings, and ensure the champion role has Create/Read on `abs_claimevidence`. |
+| Evidence links won't save | Set a valid **SharePoint document library URL** in Settings; the shipped roles already grant Create/Read on `abs_claimevidence`. |
 | `pac code push` says app not found | Run `pac code init` first (Part 2, step 1) to create the app in the target env. |
