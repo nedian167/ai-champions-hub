@@ -304,17 +304,26 @@ pac solution import --path .\deploy\solutions\AIChampionsHubApp_managed.zip --pu
 #    connection and an Office 365 Users connection, then open Apps → play the app.
 ```
 
-A single import provisions everything:
+**A single solution import provisions everything** — no separate app deployment step:
 
 - The 13 Dataverse tables, option sets and relationships.
 - **Two security roles** — **AI Champions Hub Users** (Create/Read/Write/Append/Append To on all 13
   tables) and **AI Champions Hub Admins** (same **+ Delete**). Assign **Users** to champions and
   **Admins** to program managers / app admins; no manual role setup needed.
-- The **"AI Champions Hub (Code)" app** itself (bundled Code App, preview ALM).
+- The **"AI Champions Hub (Code)" app** itself — the Code App is **bundled inside the solution**
+  (packaged with `power-apps push --solution-id`), so it lands in the target as an installed app.
 
-> Code App ALM is in preview — if the imported app can't resolve its connections automatically, you
-> can (re)deploy it from source with `pac code push` (see `deploy/DEPLOYMENT.md`, Part 2 Option B),
-> which is also how you ship code updates.
+**After import, two things are still done by hand in the target environment:**
+
+1. **Create the connections.** In `make.powerapps.com` → **Connections**, add a **Microsoft Dataverse**
+   connection and an **Office 365 Users** connection (Code Apps bind connectors client‑side, so these
+   don't travel inside the solution). Then **Apps → AI Champions Hub (Code) → Play**.
+2. **Assign the two security roles** to your users (as above).
+
+> ⚠️ **Caveat — Code App ALM is in preview.** The bundled app ships in the `.zip`, but if the imported
+> app can't resolve its connections automatically on first play, redeploy it from source with
+> `pac code push` against the target environment (see `deploy/DEPLOYMENT.md`, **Part 2 → Option B**).
+> That same `pac code push` is also how you publish code updates after the initial import.
 
 Then sign in as an admin and complete first‑run setup in **Settings** (community name/URL,
 SharePoint evidence library URL, departments, admins, branding).
