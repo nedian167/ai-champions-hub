@@ -5,7 +5,7 @@
  */
 import type {
   Abs_champions, Abs_departments, Abs_campaigns, Abs_activities, Abs_activityclaims,
-  Abs_campaignparticipations, Abs_requests, Abs_events,
+  Abs_campaignparticipations, Abs_requests, Abs_events, Abs_requestcategories,
 } from '../data/entities';
 import {
   ChampionStatus, ClaimStatus, ActivityTypeLabel, RequestCategoryLabel, RequestStatusLabel,
@@ -24,6 +24,7 @@ export interface ReportInputs {
   campaignActivities: HealthInputs['campaignActivities'];
   campaignDepartments: HealthInputs['campaignDepartments'];
   requests: Abs_requests[];
+  requestCategories: Abs_requestcategories[];
   events: Abs_events[];
   pointsFor: (id?: string) => number;
 }
@@ -152,8 +153,22 @@ export function campaignPerformance(i: ReportInputs): CampaignRow[] {
 
 /* ---------------- Requests ---------------- */
 export function requestsByCategory(i: ReportInputs): { label: string; value: number }[] {
-  return Object.entries(RequestCategoryLabel)
-    .map(([val, label]) => ({ label, value: i.requests.filter((r) => r.crd49_category === Number(val)).length }))
+  const nameById = new Map(i.requestCategories.map((c) => [c.abs_requestcategoryid, c.abs_name]));
+  const counts = new Map<string, number>();
+  for (const r of i.requests) {
+    let label: string;
+    if (r._abs_category_value) {
+      label = nameById.get(r._abs_category_value) ?? r.abs_categoryname ?? 'Uncategorized';
+    } else {
+      // Legacy rows created before categories became a lookup.
+      label = RequestCategoryLabel[r.crd49_category] ?? 'Uncategorized';
+    }
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  // Ensure every configured category shows (even with 0 requests).
+  for (const c of i.requestCategories) if (!counts.has(c.abs_name)) counts.set(c.abs_name, 0);
+  return Array.from(counts.entries())
+    .map(([label, value]) => ({ label, value }))
     .sort((a, b) => b.value - a.value);
 }
 

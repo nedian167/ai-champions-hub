@@ -24,6 +24,7 @@ export default function ReportsScreen() {
     campaignActivities: data.campaignActivities,
     campaignDepartments: data.campaignDepartments,
     requests: data.requests,
+    requestCategories: data.requestCategories,
     events: data.events,
     pointsFor: data.pointsFor,
   }), [data]);

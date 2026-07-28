@@ -73,6 +73,11 @@
         "appadmins": {
           "entitySetName": "abs_appadmins",
           "logicalName": "abs_appadmin"
+        },
+        "requestcategories": {
+          "entitySetName": "abs_requestcategories",
+          "logicalName": "abs_requestcategory",
+          "isHidden": false
         }
       },
       "environmentVariableName": ""

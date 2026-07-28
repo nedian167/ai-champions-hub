@@ -89,6 +89,13 @@ export const dataSourcesInfo = {
     "dataSourceType": "Dataverse",
     "apis": {}
   },
+  "abs_requestcategories": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "abs_requestcategoryid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "abs_requests": {
     "tableId": "",
     "version": "",
@@ -162,7 +169,8 @@ export const dataSourcesInfo = {
             "name": "body",
             "in": "body",
             "required": true,
-            "type": "object"
+            "type": "string",
+            "format": "binary"
           },
           {
             "name": "Content-Type",
@@ -469,7 +477,8 @@ export const dataSourcesInfo = {
             "name": "top",
             "in": "query",
             "required": false,
-            "type": "integer"
+            "type": "integer",
+            "format": "int32"
           }
         ],
         "responseInfo": {
@@ -516,7 +525,8 @@ export const dataSourcesInfo = {
             "name": "top",
             "in": "query",
             "required": false,
-            "type": "integer"
+            "type": "integer",
+            "format": "int32"
           },
           {
             "name": "isSearchTermRequired",
@@ -659,7 +669,8 @@ export const dataSourcesInfo = {
             "name": "$top",
             "in": "query",
             "required": false,
-            "type": "integer"
+            "type": "integer",
+            "format": "int32"
           }
         ],
         "responseInfo": {
@@ -759,7 +770,8 @@ export const dataSourcesInfo = {
             "name": "Body",
             "in": "body",
             "required": false,
-            "type": "object"
+            "type": "string",
+            "format": "binary"
           },
           {
             "name": "ContentType",

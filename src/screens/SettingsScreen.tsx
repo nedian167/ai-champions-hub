@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import {
-  ProgramSettingsSvc, AppAdminsSvc, DepartmentsSvc,
+  ProgramSettingsSvc, AppAdminsSvc, DepartmentsSvc, RequestCategoriesSvc,
 } from '../data/entities';
 import { Card, Field, Toggle, EmptyState, Avatar, Pill } from '../components/ui';
 import { Modal } from '../components/Modal';
@@ -10,7 +10,7 @@ import { formatDate } from '../lib/format';
 import { BRAND_PRESETS, DEFAULT_BRAND, normalizeBrand, applyBrand } from '../lib/branding';
 
 export default function SettingsScreen() {
-  const { settings, appAdmins, champions, departments, isAdmin, isBootstrapAdmin, currentUser, reload } = useAppData();
+  const { settings, appAdmins, champions, departments, requestCategories, isAdmin, isBootstrapAdmin, currentUser, reload } = useAppData();
   const toast = useToast();
 
   const [cfg, setCfg] = useState({
@@ -85,6 +85,7 @@ export default function SettingsScreen() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [elevateId, setElevateId] = useState('');
   const [deptModal, setDeptModal] = useState<{ id?: string; name: string } | null>(null);
+  const [catModal, setCatModal] = useState<{ id?: string; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   // Admins are matched to people by UPN — build a set to filter the champion picker.
@@ -284,6 +285,44 @@ export default function SettingsScreen() {
     }
   }
 
+  async function saveCat() {
+    if (!catModal || !catModal.name.trim()) { toast.error('Name is required.'); return; }
+    setBusy(true);
+    try {
+      if (catModal.id) {
+        const res = await RequestCategoriesSvc.update(catModal.id, {
+          abs_name: catModal.name.trim(),
+        } as never);
+        if (!res.success) throw new Error(res.error?.message ?? 'Update failed');
+      } else {
+        const res = await RequestCategoriesSvc.create({
+          abs_name: catModal.name.trim(),
+        } as never);
+        if (!res.success) throw new Error(res.error?.message ?? 'Create failed');
+      }
+      toast.success('Request category saved.');
+      setCatModal(null);
+      await reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to save request category.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeCat(id: string) {
+    setBusy(true);
+    try {
+      await RequestCategoriesSvc.delete(id);
+      toast.success('Request category removed.');
+      await reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to remove request category.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="page-header">
@@ -378,6 +417,31 @@ export default function SettingsScreen() {
                 </div>
                 <button className="btn btn-secondary btn-sm" onClick={() => setDeptModal({ id: d.abs_departmentid, name: d.abs_name })}>Edit</button>
                 <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => removeDept(d.abs_departmentid)}>Delete</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card
+        className="mt-24"
+        title={`🗂️ Request Categories (${requestCategories.length})`}
+        action={<button className="btn btn-primary btn-sm" onClick={() => setCatModal({ name: '' })}>➕ Add Category</button>}
+      >
+        <div className="text-muted" style={{ fontSize: 13, marginBottom: 12 }}>
+          Categories champions choose from when submitting a request. Add, rename or remove them freely.
+        </div>
+        {requestCategories.length === 0 ? (
+          <EmptyState icon="🗂️" title="No request categories" message="Add a category so champions can submit requests." />
+        ) : (
+          <div className="list">
+            {requestCategories.map((c) => (
+              <div className="list-item" key={c.abs_requestcategoryid}>
+                <div className="center-col spacer">
+                  <span className="item-title">{c.abs_name}</span>
+                </div>
+                <button className="btn btn-secondary btn-sm" onClick={() => setCatModal({ id: c.abs_requestcategoryid, name: c.abs_name })}>Edit</button>
+                <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => removeCat(c.abs_requestcategoryid)}>Delete</button>
               </div>
             ))}
           </div>
@@ -539,6 +603,21 @@ export default function SettingsScreen() {
           }
         >
           <Field label="Name"><input className="input" value={deptModal.name} onChange={(e) => setDeptModal({ ...deptModal, name: e.target.value })} autoFocus /></Field>
+        </Modal>
+      )}
+
+      {catModal && (
+        <Modal
+          title={catModal.id ? 'Edit Request Category' : 'Add Request Category'}
+          onClose={() => setCatModal(null)}
+          footer={
+            <>
+              <button className="btn btn-secondary" onClick={() => setCatModal(null)}>Cancel</button>
+              <button className="btn btn-primary" disabled={busy} onClick={saveCat}>{busy ? 'Saving…' : 'Save'}</button>
+            </>
+          }
+        >
+          <Field label="Name"><input className="input" value={catModal.name} onChange={(e) => setCatModal({ ...catModal, name: e.target.value })} autoFocus /></Field>
         </Modal>
       )}
 

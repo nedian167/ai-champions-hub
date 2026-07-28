@@ -14,6 +14,7 @@ import { Abs_activityclaimsService } from '../generated/services/Abs_activitycla
 import { Abs_claimevidencesService } from '../generated/services/Abs_claimevidencesService';
 import { Abs_eventsService } from '../generated/services/Abs_eventsService';
 import { Abs_requestsService } from '../generated/services/Abs_requestsService';
+import { Abs_requestcategoriesService } from '../generated/services/Abs_requestcategoriesService';
 import { Abs_programsettingsesService } from '../generated/services/Abs_programsettingsesService';
 import { Abs_appadminsService } from '../generated/services/Abs_appadminsService';
 import { Office365UsersService } from '../generated/services/Office365UsersService';
@@ -29,6 +30,7 @@ export const ActivityClaimsSvc = Abs_activityclaimsService;
 export const ClaimEvidencesSvc = Abs_claimevidencesService;
 export const EventsSvc = Abs_eventsService;
 export const RequestsSvc = Abs_requestsService;
+export const RequestCategoriesSvc = Abs_requestcategoriesService;
 export const ProgramSettingsSvc = Abs_programsettingsesService;
 export const AppAdminsSvc = Abs_appadminsService;
 
@@ -46,6 +48,7 @@ export type { Abs_activityclaims } from '../generated/models/Abs_activityclaimsM
 export type { Abs_claimevidences } from '../generated/models/Abs_claimevidencesModel';
 export type { Abs_events } from '../generated/models/Abs_eventsModel';
 export type { Abs_requests } from '../generated/models/Abs_requestsModel';
+export type { Abs_requestcategories } from '../generated/models/Abs_requestcategoriesModel';
 export type { Abs_programsettingses } from '../generated/models/Abs_programsettingsesModel';
 export type { Abs_appadmins } from '../generated/models/Abs_appadminsModel';
 
@@ -56,6 +59,7 @@ export const EntitySet = {
   campaign: 'abs_campaigns',
   activity: 'abs_activities',
   activityclaim: 'abs_activityclaims',
+  requestcategory: 'abs_requestcategories',
 } as const;
 
 /** Build an `@odata.bind` reference, e.g. bind('champion', id) => "/abs_champions(<id>)". */

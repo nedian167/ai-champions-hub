@@ -3,7 +3,7 @@
 **A complete, end‑to‑end Power Apps solution for running an AI / Copilot enablement program.**
 
 AI Champions Hub is delivered as a **fresh, self‑contained solution** — importing it into any
-Power Platform environment provisions the entire **Dataverse data model** (13 tables, option sets
+Power Platform environment provisions the entire **Dataverse data model** (14 tables, option sets
 and relationships), **two ready-to-assign security roles**, **and the React Code App itself** —
 all in one solution import. Nothing is assumed to
 pre‑exist: you get the database, the app, and the connector wiring from scratch.
@@ -21,9 +21,9 @@ triaging license/connector requests, reporting to leadership, and self‑brandin
 
 | Layer | Delivered as | Contents |
 |-------|--------------|----------|
-| **Everything, one package** | `deploy/solutions/AIChampionsHubApp_managed.zip` (and `_unmanaged.zip`) | 13 Dataverse tables, option sets, relationships, **2 ready-to-assign security roles**, **and the bundled Code App** — a single import provisions the whole solution. Publisher **ABSGSA**, prefix `abs` |
+| **Everything, one package** | `deploy/solutions/AIChampionsHubApp_managed.zip` (and `_unmanaged.zip`) | 14 Dataverse tables, option sets, relationships, **2 ready-to-assign security roles**, **and the bundled Code App** — a single import provisions the whole solution. Publisher **ABSGSA**, prefix `abs` |
 | **App source** | This repository (Vite + React + TypeScript) | The full Code App source; also deployable/updatable directly with `pac code push` |
-| **Connector** | `power.config.json` | **Office 365 Users** (people picker) + the 13 Dataverse data sources |
+| **Connector** | `power.config.json` | **Office 365 Users** (people picker) + the 14 Dataverse data sources |
 
 The package contains **only this app's data model** — no unrelated or previous app is referenced.
 
@@ -98,7 +98,7 @@ flowchart TB
 
 ## Data model
 
-Importing the solution creates these 13 tables (publisher **ABSGSA**, prefix `abs`; several
+Importing the solution creates these 14 tables (publisher **ABSGSA**, prefix `abs`; several
 columns carry the legacy `crd49_` prefix). Choice columns are integers with base `839560000`;
 all values + labels live in [`src/lib/enums.ts`](./src/lib/enums.ts).
 
@@ -112,6 +112,7 @@ erDiagram
     abs_activityclaim ||--o{ abs_claimevidence       : "proven by"
     abs_campaign    ||--o{ abs_event                 : "schedules"
     abs_champion    ||--o{ abs_request               : "raises"
+    abs_requestcategory ||--o{ abs_request           : "classifies"
     abs_campaign    ||--o{ abs_campaigndepartment    : "targets"
     abs_department  ||--o{ abs_campaigndepartment    : "targeted by"
     abs_campaign    ||--o{ abs_campaignactivity      : "includes"
@@ -180,10 +181,14 @@ erDiagram
     }
     abs_request {
         string  abs_name PK
-        choice  crd49_category "License | Connector | AgentSupport | ..."
+        choice  crd49_category "legacy option set (optional)"
         choice  crd49_status "Open | InReview | Completed"
         string  crd49_response
         lookup  crd49_champion FK
+        lookup  abs_category FK "→ abs_requestcategory"
+    }
+    abs_requestcategory {
+        string  abs_name PK "admin-configurable category"
     }
     abs_campaigndepartment {
         string  abs_name PK
@@ -249,7 +254,7 @@ erDiagram
 | `/requests` | Requests | KPIs, filters, submit request, threaded triage |
 | `/reports` | Reports *(admin)* | executive KPIs, department & activity‑type breakdowns, monthly trend, campaign performance (RAG), requests/events overview, CSV + Print/PDF |
 | `/customize` | Customize | per‑user Light/Dark, font family & size — live preview + save |
-| `/settings` | Settings *(admin)* | program config, application admins, departments, **App Theme & Branding** (color + logo) |
+| `/settings` | Settings *(admin)* | program config, application admins, departments, **request categories** (admin-configurable), **App Theme & Branding** (color + logo) |
 
 ---
 
@@ -276,6 +281,10 @@ erDiagram
 - **App‑wide branding (admin).** Settings → App Theme & Branding sets a brand color (presets or
   custom hex) that recolors buttons, links, highlights, active nav **and the left panel**, plus an
   uploaded **app logo** shown top‑left — stored on `abs_programsettings` for every user.
+- **Configurable request categories (admin).** Settings → Request Categories lets admins add, rename
+  and remove the categories champions pick from when raising a request. Categories are stored in the
+  `abs_requestcategory` table (a lookup on `abs_request`), so they are no longer limited to a fixed
+  set — reports and filters follow the configured list automatically.
 
 ---
 
@@ -284,7 +293,7 @@ erDiagram
 - **Vite 7** + **React 19** + **TypeScript** (strict)
 - **React Router** for the 11 client routes
 - **Power Apps Code SDK** (`@pa-client/power-code-sdk`) — auth + Dataverse + connector access
-- **Dataverse** — 13 tables provisioned by the solution package
+- **Dataverse** — 14 tables provisioned by the solution package
 - No charting library — Reports charts are lightweight inline SVG/CSS components
 
 ---
@@ -307,8 +316,8 @@ pac solution import --path .\deploy\solutions\AIChampionsHubApp_managed.zip --pu
 
 **A single solution import provisions everything** — no separate app deployment step:
 
-- The 13 Dataverse tables, option sets and relationships.
-- **Two security roles** — **AI Champions Hub Users** (Create/Read/Write/Append/Append To on all 13
+- The 14 Dataverse tables, option sets and relationships.
+- **Two security roles** — **AI Champions Hub Users** (Create/Read/Write/Append/Append To on all 14
   tables) and **AI Champions Hub Admins** (same **+ Delete**). Assign **Users** to champions and
   **Admins** to program managers / app admins; no manual role setup needed.
 - The **"AI Champions Hub (Code)" app** itself — the Code App is **bundled inside the solution**
@@ -358,8 +367,8 @@ admin”** button:
 
 ### Versioning & upgrades (don't reset existing data)
 
-The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.1`) and is the
-same number carried by the deployable solution (`v1.0.1` in the app → solution version `1.0.1.0`).
+The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.2`) and is the
+same number carried by the deployable solution (`v1.0.2` in the app → solution version `1.0.2.0`).
 
 **To ship an update to a tenant that already has the app — without wiping its data — re-import as an
 upgrade with a *higher* version number.** Dataverse only preserves existing rows when the incoming
@@ -377,9 +386,9 @@ Because the version travels *inside* the exported `.zip`, every shipped change m
 
 | Where | File / command | Format |
 | --- | --- | --- |
-| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.1` |
-| npm package | `package.json` → `version` | `1.0.1` |
-| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.1.0` | `1.0.1.0` |
+| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.2` |
+| npm package | `package.json` → `version` | `1.0.2` |
+| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.2.0` | `1.0.2.0` |
 
 **Release checklist for any future change:**
 
