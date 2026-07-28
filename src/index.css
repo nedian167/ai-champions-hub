@@ -881,6 +881,11 @@ h4 {
   background: var(--amber-soft);
 }
 .notice-warning b { color: var(--amber); }
+.notice-info {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+.notice-info strong { color: var(--primary); }
 .points-badge {
   background: var(--primary-soft);
   color: var(--primary);
