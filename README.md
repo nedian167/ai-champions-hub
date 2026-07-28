@@ -4,8 +4,8 @@
 
 AI Champions Hub is delivered as a **fresh, self‑contained solution** — importing it into any
 Power Platform environment provisions the entire **Dataverse data model** (13 tables, option sets
-and relationships), **two ready-to-assign security roles**, and the **React Code App** that runs on
-top of it. Nothing is assumed to
+and relationships), **two ready-to-assign security roles**, **and the React Code App itself** —
+all in one solution import. Nothing is assumed to
 pre‑exist: you get the database, the app, and the connector wiring from scratch.
 
 The app helps a program run day to day: onboarding champions, launching learning campaigns,
@@ -21,8 +21,8 @@ triaging license/connector requests, reporting to leadership, and self‑brandin
 
 | Layer | Delivered as | Contents |
 |-------|--------------|----------|
-| **Data model** | `deploy/solutions/AIChampionsHubApp_managed.zip` (and `_unmanaged.zip`) | 13 Dataverse tables, option sets, relationships **+ 2 ready-to-assign security roles** — publisher **ABSGSA**, prefix `abs` |
-| **Application** | This repository (Vite + React + TypeScript) | The full Code App, deployed with `pac code push` |
+| **Everything, one package** | `deploy/solutions/AIChampionsHubApp_managed.zip` (and `_unmanaged.zip`) | 13 Dataverse tables, option sets, relationships, **2 ready-to-assign security roles**, **and the bundled Code App** — a single import provisions the whole solution. Publisher **ABSGSA**, prefix `abs` |
+| **App source** | This repository (Vite + React + TypeScript) | The full Code App source; also deployable/updatable directly with `pac code push` |
 | **Connector** | `power.config.json` | **Office 365 Users** (people picker) + the 13 Dataverse data sources |
 
 The package contains **only this app's data model** — no unrelated or previous app is referenced.
@@ -290,27 +290,31 @@ erDiagram
 
 ## Deploy to a new environment (fresh, end‑to‑end)
 
-Full step‑by‑step (schema import + connections + Code App push, incl. cross‑tenant) is in
+Full step‑by‑step (single-import + connections, incl. cross‑tenant) is in
 **[`deploy/DEPLOYMENT.md`](./deploy/DEPLOYMENT.md)**. In short:
 
 ```powershell
 # 1. Authenticate to the TARGET environment
 pac auth create --environment <TARGET_ENVIRONMENT_ID>
 
-# 2. Import the data model (managed for prod, unmanaged for dev)
+# 2. Import the whole solution — tables + roles + the bundled Code App
 pac solution import --path .\deploy\solutions\AIChampionsHubApp_managed.zip --publish-changes
 
-# 3. Deploy the Code App from source
-npm install
-pac code init --displayName "AI Champions Hub (Code)"      # creates the app in the target env
-pac code add-data-source -a office365users -c <CONNECTION_ID>   # bind the people-picker connection
-npm run build
-pac code push
+# 3. In make.powerapps.com (target env) → Connections, create a Microsoft Dataverse
+#    connection and an Office 365 Users connection, then open Apps → play the app.
 ```
 
-The import **auto-creates two security roles** — **AI Champions Hub Users** (Create/Read/Write/
-Append/Append To on all 13 tables) and **AI Champions Hub Admins** (same **+ Delete**). Assign
-**Users** to champions and **Admins** to program managers / app admins; no manual role setup needed.
+A single import provisions everything:
+
+- The 13 Dataverse tables, option sets and relationships.
+- **Two security roles** — **AI Champions Hub Users** (Create/Read/Write/Append/Append To on all 13
+  tables) and **AI Champions Hub Admins** (same **+ Delete**). Assign **Users** to champions and
+  **Admins** to program managers / app admins; no manual role setup needed.
+- The **"AI Champions Hub (Code)" app** itself (bundled Code App, preview ALM).
+
+> Code App ALM is in preview — if the imported app can't resolve its connections automatically, you
+> can (re)deploy it from source with `pac code push` (see `deploy/DEPLOYMENT.md`, Part 2 Option B),
+> which is also how you ship code updates.
 
 Then sign in as an admin and complete first‑run setup in **Settings** (community name/URL,
 SharePoint evidence library URL, departments, admins, branding).
@@ -358,7 +362,7 @@ src/
 
 deploy/
   DEPLOYMENT.md          # Cross-tenant deployment guide
-  solutions/             # AIChampionsHubApp_managed.zip + _unmanaged.zip (13 tables + 2 security roles)
+  solutions/             # AIChampionsHubApp_managed.zip + _unmanaged.zip (tables + roles + bundled app)
 ```
 
 ---
