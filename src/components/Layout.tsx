@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
 import { Avatar } from './ui';
+import { APP_VERSION } from '../version';
 
 const NAV: { to: string; label: string; icon: string; adminOnly?: boolean }[] = [
   { to: '/', label: 'Home', icon: '🏠' },
@@ -74,7 +75,10 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-        <div className="sidebar-footer">Empowering AI adoption, one champion at a time.</div>
+        <div className="sidebar-footer">
+          <div>Empowering AI adoption, one champion at a time.</div>
+          <div className="sidebar-version">v{APP_VERSION}</div>
+        </div>
       </aside>
 
       <div className="main">

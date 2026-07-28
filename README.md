@@ -356,6 +356,40 @@ admin”** button:
 > who imported the solution). Add the real administrator right away so access is pinned to a known
 > account.
 
+### Versioning & upgrades (don't reset existing data)
+
+The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.1`) and is the
+same number carried by the deployable solution (`v1.0.1` in the app → solution version `1.0.1.0`).
+
+**To ship an update to a tenant that already has the app — without wiping its data — re-import as an
+upgrade with a *higher* version number.** Dataverse only preserves existing rows when the incoming
+solution version is greater than the installed one; re-importing the *same* version can fail or
+overwrite, and installing a lower version is rejected.
+
+```powershell
+# Upgrade an existing install (data preserved), rather than a clean import:
+pac solution import --path .\deploy\solutions\AIChampionsHubApp_managed.zip --import-as-holding --publish-changes
+pac solution upgrade --solution-name AIChampionsHubApp
+```
+
+Because the version travels *inside* the exported `.zip`, every shipped change must bump the version
+**before** the solution is re-exported. Keep these three in lock‑step:
+
+| Where | File / command | Format |
+| --- | --- | --- |
+| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.1` |
+| npm package | `package.json` → `version` | `1.0.1` |
+| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.1.0` | `1.0.1.0` |
+
+**Release checklist for any future change:**
+
+1. Bump `APP_VERSION` in `src/version.ts` and `version` in `package.json` (e.g. `1.0.1` → `1.0.2`).
+2. `npm run build`.
+3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.2.0`.
+4. Re-push + re-bundle the app: `npx power-apps push --solution-id <solution-id>`.
+5. Re-export both zips: `pac solution export --name AIChampionsHubApp --path .\deploy\solutions\AIChampionsHubApp_managed.zip --managed true --overwrite` (and again `--managed false` for the unmanaged zip).
+6. Commit the bumped sources **and** the refreshed zips together.
+
 ---
 
 ## Local development
