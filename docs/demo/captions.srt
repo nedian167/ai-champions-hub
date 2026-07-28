@@ -1,71 +1,99 @@
 1
-00:00:00,000 --> 00:00:08,904
+00:00:00,000 --> 00:00:08,010
 AI Champions Hub. A Power Apps code app that runs your company's AI adoption program. Here's a quick tour.
 
 2
-00:00:09,904 --> 00:00:13,288
+00:00:08,010 --> 00:00:11,530
 First, the program manager experience.
 
 3
-00:00:14,288 --> 00:00:23,288
+00:00:11,530 --> 00:00:20,530
 The home dashboard opens with a live pulse of the program — active champions, running campaigns, completed activities, and campaigns at risk.
 
 4
-00:00:24,188 --> 00:00:31,964
-Campaigns are grouped by status — active, draft, expired and completed — each with a health indicator so nothing slips.
+00:00:20,530 --> 00:00:30,610
+The Champions directory is your whole roster at a glance — department, points and status — and you can add, edit, disable, or remove any champion in seconds.
 
 5
-00:00:32,864 --> 00:00:38,840
-Open any campaign to manage its activities, participants and timeline in one place.
+00:00:30,610 --> 00:00:38,530
+Campaigns are grouped by status — active, draft, expired and completed — each with a health indicator so nothing slips.
 
 6
-00:00:39,740 --> 00:00:47,396
-Activities live inside campaigns. Managers create them and review the point claims champions submit.
+00:00:38,530 --> 00:00:44,330
+Open any campaign to manage its activities, participants and timeline in one place.
 
 7
-00:00:48,296 --> 00:00:54,776
-Champions' requests for licenses, connectors and A I support land here for the team to triage.
+00:00:44,330 --> 00:00:51,050
+Activities live inside campaigns. Managers create them and review the point claims champions submit.
 
 8
-00:00:55,676 --> 00:01:05,732
-The Reports workspace rolls it all up — adoption, points by department, approval rates and campaign health — exportable to C S V or P D F.
+00:00:51,050 --> 00:00:58,180
+Events bring the community together — workshops, office hours and demos, all scheduled from one place.
 
 9
-00:01:06,632 --> 00:01:14,144
-In Settings you configure the program and promote or demote admins, with a protected default admin that can never be removed.
+00:00:58,180 --> 00:01:04,700
+A company-wide leaderboard adds a little friendly competition — a great way to keep the momentum high.
 
 10
-00:01:15,044 --> 00:01:22,028
-You can even tailor the request categories champions choose from — add, rename or remove them at any time.
+00:01:04,700 --> 00:01:10,510
+Champions' requests for licenses, connectors and A I support land here for the team to triage.
 
 11
-00:01:22,928 --> 00:01:25,832
-Now, the champion experience.
+00:01:10,510 --> 00:01:20,110
+The Reports workspace rolls it all up — adoption, points by department, approval rates and campaign health — exportable to C S V or P D F.
 
 12
-00:01:26,832 --> 00:01:33,792
-Champions get a personalized home — their points, their rank, pending claims and the campaigns they've joined.
+00:01:20,110 --> 00:01:27,840
+Make it yours — the Customize workspace themes the whole app with your own colors, fonts and branding, no code required.
 
 13
-00:01:34,692 --> 00:01:38,988
-They browse active campaigns and join the ones that interest them.
+00:01:27,840 --> 00:01:35,200
+In Settings you configure the program and promote or demote admins, with a protected default admin that can never be removed.
 
 14
-00:01:39,888 --> 00:01:45,744
-Activities unlock once they join a campaign, keeping everyone focused on live work.
+00:01:35,200 --> 00:01:42,480
+You can even tailor the request categories champions choose from — add, rename or remove them at any time.
 
 15
-00:01:46,644 --> 00:01:52,596
-Each claim is tracked from submitted to approved — and every activity can be claimed only once.
+00:01:42,480 --> 00:01:45,600
+Now, the champion experience.
 
 16
-00:01:53,496 --> 00:02:00,048
-Need something? They raise a request, choosing from the categories the admin configured.
+00:01:45,600 --> 00:01:52,560
+Champions get a personalized home — their points, their rank, pending claims and the campaigns they've joined.
 
 17
-00:02:00,948 --> 00:02:06,612
-And a friendly leaderboard celebrates the champions leading A I adoption across the company.
+00:01:52,560 --> 00:01:58,970
+They start in the campaign gallery — bright banner art, departments and progress, all at a glance.
 
 18
-00:02:07,512 --> 00:02:13,368
+00:01:58,970 --> 00:02:03,170
+They browse active campaigns and join the ones that interest them.
+
+19
+00:02:03,170 --> 00:02:09,170
+Activities unlock once they join a campaign, keeping everyone focused on live work.
+
+20
+00:02:09,170 --> 00:02:15,340
+Each claim is tracked from submitted to approved — and every activity can be claimed only once.
+
+21
+00:02:15,340 --> 00:02:21,270
+Need something? They raise a request, choosing from the categories the admin configured.
+
+22
+00:02:21,270 --> 00:02:26,360
+And they can follow every request they've raised, right through to resolution.
+
+23
+00:02:26,360 --> 00:02:32,000
+And a friendly leaderboard celebrates the champions leading A I adoption across the company.
+
+24
+00:02:32,000 --> 00:02:38,480
+Champions can personalize their own view too — light or dark, font and size — saved right to their profile.
+
+25
+00:02:38,480 --> 00:02:44,880
 AI Champions Hub — built with Power Apps code apps, ready to deploy to your tenant.
