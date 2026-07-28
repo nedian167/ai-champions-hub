@@ -1,0 +1,22 @@
+AI Champions Hub — Demo narration script
+Voice: en-US-AriaNeural (neural) · Music: synthesized ambient pad (ducked)
+Total runtime: 134.4s
+
+01. [CARD] AI Champions Hub. A Power Apps code app that runs your company's AI adoption program. Here's a quick tour.
+02. [CARD] First, the program manager experience.
+03. The home dashboard opens with a live pulse of the program — active champions, running campaigns, completed activities, and campaigns at risk.
+04. Campaigns are grouped by status — active, draft, expired and completed — each with a health indicator so nothing slips.
+05. Open any campaign to manage its activities, participants and timeline in one place.
+06. Activities live inside campaigns. Managers create them and review the point claims champions submit.
+07. Champions' requests for licenses, connectors and A I support land here for the team to triage.
+08. The Reports workspace rolls it all up — adoption, points by department, approval rates and campaign health — exportable to C S V or P D F.
+09. In Settings you configure the program and promote or demote admins, with a protected default admin that can never be removed.
+10. You can even tailor the request categories champions choose from — add, rename or remove them at any time.
+11. [CARD] Now, the champion experience.
+12. Champions get a personalized home — their points, their rank, pending claims and the campaigns they've joined.
+13. They browse active campaigns and join the ones that interest them.
+14. Activities unlock once they join a campaign, keeping everyone focused on live work.
+15. Each claim is tracked from submitted to approved — and every activity can be claimed only once.
+16. Need something? They raise a request, choosing from the categories the admin configured.
+17. And a friendly leaderboard celebrates the champions leading A I adoption across the company.
+18. [CARD] AI Champions Hub — built with Power Apps code apps, ready to deploy to your tenant.

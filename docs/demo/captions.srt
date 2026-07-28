@@ -1,0 +1,71 @@
+1
+00:00:00,000 --> 00:00:08,904
+AI Champions Hub. A Power Apps code app that runs your company's AI adoption program. Here's a quick tour.
+
+2
+00:00:09,904 --> 00:00:13,288
+First, the program manager experience.
+
+3
+00:00:14,288 --> 00:00:23,288
+The home dashboard opens with a live pulse of the program — active champions, running campaigns, completed activities, and campaigns at risk.
+
+4
+00:00:24,188 --> 00:00:31,964
+Campaigns are grouped by status — active, draft, expired and completed — each with a health indicator so nothing slips.
+
+5
+00:00:32,864 --> 00:00:38,840
+Open any campaign to manage its activities, participants and timeline in one place.
+
+6
+00:00:39,740 --> 00:00:47,396
+Activities live inside campaigns. Managers create them and review the point claims champions submit.
+
+7
+00:00:48,296 --> 00:00:54,776
+Champions' requests for licenses, connectors and A I support land here for the team to triage.
+
+8
+00:00:55,676 --> 00:01:05,732
+The Reports workspace rolls it all up — adoption, points by department, approval rates and campaign health — exportable to C S V or P D F.
+
+9
+00:01:06,632 --> 00:01:14,144
+In Settings you configure the program and promote or demote admins, with a protected default admin that can never be removed.
+
+10
+00:01:15,044 --> 00:01:22,028
+You can even tailor the request categories champions choose from — add, rename or remove them at any time.
+
+11
+00:01:22,928 --> 00:01:25,832
+Now, the champion experience.
+
+12
+00:01:26,832 --> 00:01:33,792
+Champions get a personalized home — their points, their rank, pending claims and the campaigns they've joined.
+
+13
+00:01:34,692 --> 00:01:38,988
+They browse active campaigns and join the ones that interest them.
+
+14
+00:01:39,888 --> 00:01:45,744
+Activities unlock once they join a campaign, keeping everyone focused on live work.
+
+15
+00:01:46,644 --> 00:01:52,596
+Each claim is tracked from submitted to approved — and every activity can be claimed only once.
+
+16
+00:01:53,496 --> 00:02:00,048
+Need something? They raise a request, choosing from the categories the admin configured.
+
+17
+00:02:00,948 --> 00:02:06,612
+And a friendly leaderboard celebrates the champions leading A I adoption across the company.
+
+18
+00:02:07,512 --> 00:02:13,368
+AI Champions Hub — built with Power Apps code apps, ready to deploy to your tenant.
