@@ -88,10 +88,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [requests, setRequests] = useState<Abs_requests[]>([]);
   const [settings, setSettings] = useState<Abs_programsettingses | null>(null);
   const [appAdmins, setAppAdmins] = useState<Abs_appadmins[]>([]);
+  // Whether the last app-admins read actually SUCCEEDED. Distinguishes a genuinely
+  // empty program (success + 0 rows) from a read we weren't allowed to make (denied /
+  // no role). Bootstrap-admin must only trigger on a confirmed-empty read (fail closed).
+  const [appAdminsReadOk, setAppAdminsReadOk] = useState(false);
 
   const reload = useCallback(async () => {
+    // Start the app-admins read alongside the others, but keep its full result so we
+    // can inspect success (not just the data array) for the bootstrap decision.
+    const adminsPromise = AppAdminsSvc.getAll({ top: 5000 });
     const [
-      champ, dept, camp, campDept, campAct, part, act, clm, evid, evt, req, sett, admins,
+      champ, dept, camp, campDept, campAct, part, act, clm, evid, evt, req, sett,
     ] = await Promise.all([
       all(ChampionsSvc.getAll({ top: 5000 })),
       all(DepartmentsSvc.getAll({ top: 5000 })),
@@ -105,8 +112,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       all(EventsSvc.getAll({ top: 5000 })),
       all(RequestsSvc.getAll({ top: 5000 })),
       all(ProgramSettingsSvc.getAll({ top: 5 })),
-      all(AppAdminsSvc.getAll({ top: 5000 })),
     ]);
+    let adminsRes: { success?: boolean; data?: Abs_appadmins[] };
+    try {
+      adminsRes = await adminsPromise;
+    } catch {
+      adminsRes = { success: false, data: [] };
+    }
     setChampions(champ);
     setDepartments(dept);
     setCampaigns(camp);
@@ -119,7 +131,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setEvents(evt);
     setRequests(req);
     setSettings(sett[0] ?? null);
-    setAppAdmins(admins);
+    setAppAdmins(adminsRes.data ?? []);
+    // Only trust an empty list when the read explicitly succeeded.
+    setAppAdminsReadOk(adminsRes.success === true);
   }, []);
 
   useEffect(() => {
@@ -210,8 +224,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   }, [appAdmins, currentUser]);
   // First-run bootstrap: on a fresh deployment with no admins configured yet, the
   // signed-in user gets admin access so they can set the program up (and add the
-  // persistent admin). Once any app admin exists this is false and normal gating applies.
-  const isBootstrapAdmin = !loading && !!currentUser && appAdmins.length === 0;
+  // persistent admin). FAIL-CLOSED: only triggers when the app-admins read actually
+  // succeeded and returned zero rows — never when the read was denied (e.g. a user
+  // without the role, who would otherwise see an empty list and be wrongly offered the
+  // "add me" option). Once any app admin exists this is false and normal gating applies.
+  const isBootstrapAdmin =
+    !loading && !!currentUser && appAdminsReadOk && appAdmins.length === 0;
   const isAdmin = isProgramManager || isAppAdmin || isBootstrapAdmin;
 
   const value: AppDataValue = {

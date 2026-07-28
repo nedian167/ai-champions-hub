@@ -203,6 +203,18 @@ export default function SettingsScreen() {
     if (currentUserIsAdmin) { toast.toast('You are already an admin.'); return; }
     setBusy(true);
     try {
+      // Re-check the live admin list right before creating: only allow the self-add
+      // while the program genuinely has zero admins. Guards against a race where two
+      // first-time users both see an empty list, and against a stale local cache.
+      const check = await AppAdminsSvc.getAll({ top: 5 });
+      if (!check.success) {
+        throw new Error('Could not verify existing admins. Please try again.');
+      }
+      if ((check.data ?? []).length > 0) {
+        toast.error('An administrator already exists. Ask an admin to grant you access.');
+        await reload();
+        return;
+      }
       const res = await AppAdminsSvc.create({
         abs_userid: currentUser.userPrincipalName,
         abs_displayname: currentUser.fullName || currentUser.userPrincipalName,
