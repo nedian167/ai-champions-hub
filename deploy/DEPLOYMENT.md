@@ -1,16 +1,19 @@
 # Deploy AI Champions Hub to another tenant / environment
 
 This guide takes the app from zero to running in a **brand-new Power Platform environment**
-(a different tenant is fully supported). It has two parts:
+(a different tenant is fully supported).
 
-1. **Import the Dataverse schema** — the 13 `abs_` tables, their columns, option sets and
-   relationships — from the solution package in [`solutions/`](./solutions).
-2. **Deploy the Code App** from this repository's source with `pac code push`.
+The solution package now ships the **complete solution in a single `.zip`** — the 13 `abs_`
+tables (columns, option sets, relationships), **two security roles**, **and the React Code App
+itself** (bundled as a Canvas/Code App component, preview ALM feature). So a single
+**solution import** provisions the data model, the roles, *and* the app.
 
-> **What's in the package (and what isn't).** The solution contains **only the AI Champions
-> Hub data model** — no other/previous app is referenced. The React Code App itself is **not**
-> shipped inside the solution; it is deployed from this repo's source in Part 2. This keeps the
-> package clean and the app versioned in git.
+You then only need to wire up **connections** (Dataverse + Office 365 Users) in the target and
+publish. Deploying the app from source with `pac code push` is still available as an alternative /
+for pushing code updates (see Part 2, Option B).
+
+> **What's in the package.** Only the AI Champions Hub solution — data model + roles + the
+> current build of the "AI Champions Hub (Code)" app. No other/previous app is referenced.
 
 ---
 
@@ -33,7 +36,7 @@ pac org who          # confirm you're pointed at the target org
 
 ---
 
-## Part 1 — Import the Dataverse schema
+## Part 1 — Import the solution (tables + roles + app)
 
 Pick **one** package:
 
@@ -81,15 +84,31 @@ Admins** to program managers and app admins.
 
 ---
 
-## Part 2 — Deploy the Code App from source
+## Part 2 — Connect and run the app
+
+The import (Part 1) already created the **"AI Champions Hub (Code)"** app in the target
+environment. Code Apps store their connector binding client-side, so after import you wire the two
+connections the app uses:
+
+1. In <https://make.powerapps.com> (target env) → **Connections → + New connection**, create:
+   - a **Microsoft Dataverse** connection, and
+   - an **Office 365 Users** connection (the people picker).
+2. Open **Apps → AI Champions Hub (Code) → Play**. On first launch you'll be prompted to authorize
+   the connections; approve them.
+
+> **Note (preview).** Code App ALM is in preview. If the imported app can't resolve its connections
+> automatically, use **Option B** below to (re)push it from source against the target env — this
+> re-binds the connectors and is also how you ship future code updates.
+
+### Option B — Deploy / update the Code App from source
 
 From a clone of this repository, pointed at the **target** environment:
 
 ```powershell
 npm install
 
-# 1. Create a NEW Code App in the target environment.
-#    This rewrites power.config.json with the new appId + environmentId.
+# 1. Create/refresh the Code App in the target environment.
+#    This rewrites power.config.json with the target appId + environmentId.
 pac code init --displayName "AI Champions Hub (Code)"
 
 # 2. Re-bind the Office 365 Users connector to a connection in the target env.
@@ -139,4 +158,24 @@ Then add champions (**Champions → Add Champion**) and create your first campai
 | App loads but lists are empty | Assign the signed-in user one of the shipped roles — **AI Champions Hub Users** (champions) or **AI Champions Hub Admins** (admins) — see Part 1. |
 | People picker returns nothing | The Office 365 Users connection is missing/expired — recreate it and re-run step 2. |
 | Evidence links won't save | Set a valid **SharePoint document library URL** in Settings; the shipped roles already grant Create/Read on `abs_claimevidence`. |
-| `pac code push` says app not found | Run `pac code init` first (Part 2, step 1) to create the app in the target env. |
+| `pac code push` says app not found | Run `pac code init` first (Part 2, Option B) to create the app in the target env. |
+| Imported app won't launch / shows connector errors | Code App ALM is in preview — re-push from source (Part 2, Option B) to re-bind connectors in the target env. |
+
+---
+
+## Maintainer note — how the app is bundled in the solution
+
+The Code App is added to the `AIChampionsHubApp` solution using the npm CLI's solution targeting
+(preview), so it exports/imports with the rest of the solution:
+
+```powershell
+# From the repo root, authenticated to the SOURCE env:
+npm run build
+npx power-apps push --solution-id <AIChampionsHubApp solution GUID>
+
+# Then re-export both packages:
+pac solution export --name AIChampionsHubApp --path .\deploy\solutions\AIChampionsHubApp_managed.zip   --managed true  --overwrite
+pac solution export --name AIChampionsHubApp --path .\deploy\solutions\AIChampionsHubApp_unmanaged.zip --managed false --overwrite
+```
+
+Re-run this whenever the app changes so the shipped `.zip` files carry the latest build.
