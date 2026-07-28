@@ -10,7 +10,7 @@ import { formatDate } from '../lib/format';
 import { BRAND_PRESETS, DEFAULT_BRAND, normalizeBrand, applyBrand } from '../lib/branding';
 
 export default function SettingsScreen() {
-  const { settings, appAdmins, champions, departments, isAdmin, currentUser, reload } = useAppData();
+  const { settings, appAdmins, champions, departments, isAdmin, isBootstrapAdmin, currentUser, reload } = useAppData();
   const toast = useToast();
 
   const [cfg, setCfg] = useState({
@@ -91,6 +91,12 @@ export default function SettingsScreen() {
   const adminUpns = useMemo(
     () => new Set(appAdmins.map((a) => (a.abs_userid || '').toLowerCase())),
     [appAdmins],
+  );
+
+  // Is the signed-in user already a persistent app admin?
+  const currentUserIsAdmin = useMemo(
+    () => !!currentUser?.userPrincipalName && adminUpns.has(currentUser.userPrincipalName.toLowerCase()),
+    [adminUpns, currentUser],
   );
 
   // Champions who aren't already admins can be elevated.
@@ -189,6 +195,30 @@ export default function SettingsScreen() {
     }
   }
 
+  // First-run bootstrap: let the signed-in owner make themselves the persistent app
+  // admin without first having to exist as a champion. This is the intended path on a
+  // freshly deployed program (no champions/admins seeded yet).
+  async function addSelfAsAdmin() {
+    if (!currentUser?.userPrincipalName) { toast.error('No signed-in user to grant admin.'); return; }
+    if (currentUserIsAdmin) { toast.toast('You are already an admin.'); return; }
+    setBusy(true);
+    try {
+      const res = await AppAdminsSvc.create({
+        abs_userid: currentUser.userPrincipalName,
+        abs_displayname: currentUser.fullName || currentUser.userPrincipalName,
+        abs_addedby: currentUser.userPrincipalName,
+        abs_addeddate: new Date().toISOString(),
+      } as never);
+      if (!res.success) throw new Error(res.error?.message ?? 'Create failed');
+      toast.success('You now have admin access.');
+      await reload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Failed to grant admin access.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function demoteAdmin(a: typeof appAdmins[number]) {
     const reason = demoteBlockReason(a);
     if (reason) { toast.error(reason); return; }
@@ -280,6 +310,20 @@ export default function SettingsScreen() {
         </Card>
 
         <Card title={`👮 Application Admins (${appAdmins.length})`} action={<button className="btn btn-secondary btn-sm" onClick={() => setShowAdmin(true)}>Manage</button>}>
+          {isBootstrapAdmin && (
+            <div className="notice notice-info" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+              <div>
+                <strong>👋 Welcome — you're setting this program up for the first time.</strong>
+                <div className="item-sub" style={{ marginTop: 4 }}>
+                  No app admins exist yet, so you have temporary admin access as the app owner. Add
+                  yourself as the permanent administrator so you keep access after setup.
+                </div>
+              </div>
+              <button className="btn btn-primary btn-sm" disabled={busy} onClick={addSelfAsAdmin}>
+                {busy ? 'Working…' : 'Add me as an admin'}
+              </button>
+            </div>
+          )}
           {appAdmins.length === 0 ? (
             <EmptyState icon="👮" title="No app admins" message="Add an admin to grant elevated access." />
           ) : (
@@ -438,6 +482,14 @@ export default function SettingsScreen() {
               <button className="btn btn-primary" disabled={busy || !elevateId} onClick={elevateAdmin}>{busy ? 'Working…' : 'Elevate'}</button>
             </div>
           </Field>
+
+          {!currentUserIsAdmin && currentUser && (
+            <Field label="Add yourself" help="Grant admin access to the signed-in user, even if you're not a champion yet.">
+              <button className="btn btn-secondary" disabled={busy} onClick={addSelfAsAdmin}>
+                {busy ? 'Working…' : `Add me (${currentUser.fullName || currentUser.userPrincipalName})`}
+              </button>
+            </Field>
+          )}
 
           <div className="divider" />
           <div className="section-label">Current admins ({appAdmins.length})</div>

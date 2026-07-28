@@ -27,6 +27,14 @@ interface AppDataValue {
   isProgramManager: boolean;
   isAppAdmin: boolean;
   isAdmin: boolean;
+  /**
+   * True on a freshly deployed program that has no app admins configured yet.
+   * The signed-in user (the app owner playing it for the first time) is granted
+   * admin access so they can bootstrap the program — assign the persistent admin,
+   * add departments, configure settings. Turns off automatically once at least one
+   * app admin exists (the Manage Admins UI never lets the last admin be removed).
+   */
+  isBootstrapAdmin: boolean;
 
   champions: Abs_champions[];
   departments: Abs_departments[];
@@ -200,10 +208,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     const upn = currentUser.userPrincipalName.toLowerCase();
     return appAdmins.some((a) => (a.abs_userid ?? '').toLowerCase() === upn);
   }, [appAdmins, currentUser]);
-  const isAdmin = isProgramManager || isAppAdmin;
+  // First-run bootstrap: on a fresh deployment with no admins configured yet, the
+  // signed-in user gets admin access so they can set the program up (and add the
+  // persistent admin). Once any app admin exists this is false and normal gating applies.
+  const isBootstrapAdmin = !loading && !!currentUser && appAdmins.length === 0;
+  const isAdmin = isProgramManager || isAppAdmin || isBootstrapAdmin;
 
   const value: AppDataValue = {
     loading, error, currentUser, currentChampion, isProgramManager, isAppAdmin, isAdmin,
+    isBootstrapAdmin,
     champions, departments, campaigns, campaignDepartments, campaignActivities, participations,
     activities, claims, evidence, events, requests, settings, appAdmins,
     championById, departmentById, campaignById, activityById,
