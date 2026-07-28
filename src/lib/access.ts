@@ -8,8 +8,30 @@
  *  - When a campaign is disabled (expired / not live), its activities are treated as disabled
  *    for anyone whose access depended on that campaign.
  */
-import type { Abs_campaignactivities, Abs_campaignparticipations, Abs_campaigns } from '../data/entities';
+import type { Abs_activityclaims, Abs_campaignactivities, Abs_campaignparticipations, Abs_campaigns } from '../data/entities';
 import { isCampaignLive } from './campaignStatus';
+import { ClaimStatus } from './enums';
+
+/**
+ * A champion may claim a given activity within a given campaign only once. A claim is
+ * "active" (i.e. blocks re-claiming) when it is Pending or Approved. A Rejected claim does
+ * NOT block, so a champion can resubmit after a rejection.
+ */
+export function hasActiveClaim(
+  championId: string | undefined,
+  activityId: string,
+  campaignId: string,
+  claims: Abs_activityclaims[],
+): boolean {
+  if (!championId) return false;
+  return claims.some(
+    (c) =>
+      c._crd49_champion_value === championId &&
+      c._crd49_activity_value === activityId &&
+      c._crd49_campaign_value === campaignId &&
+      (c.crd49_status === ClaimStatus.Pending || c.crd49_status === ClaimStatus.Approved),
+  );
+}
 
 /** Campaign ids an activity is linked to (via the junction). */
 export function campaignIdsForActivity(
@@ -71,7 +93,9 @@ export function isActivityActive(
 
 /**
  * Campaigns a champion can claim this activity under: campaigns that (a) the activity is
- * linked to, (b) the champion has joined, and (c) are currently live.
+ * linked to, (b) the champion has joined, (c) are currently live, and (d) the champion does
+ * not already have an active (Pending/Approved) claim for. Pass `claims` to enforce the
+ * one-claim-per-activity-per-campaign rule; omit it to skip that check.
  */
 export function claimableCampaignsForActivity(
   activityId: string,
@@ -79,11 +103,13 @@ export function claimableCampaignsForActivity(
   campaignActivities: Abs_campaignactivities[],
   participations: Abs_campaignparticipations[],
   campaignById: Map<string, Abs_campaigns>,
+  claims: Abs_activityclaims[] = [],
 ): Abs_campaigns[] {
   if (!championId) return [];
   const joined = joinedCampaignIds(championId, participations);
   return campaignIdsForActivity(activityId, campaignActivities)
     .filter((cid) => joined.has(cid))
+    .filter((cid) => !hasActiveClaim(championId, activityId, cid, claims))
     .map((cid) => campaignById.get(cid))
     .filter((c): c is Abs_campaigns => !!c && isCampaignLive(c));
 }

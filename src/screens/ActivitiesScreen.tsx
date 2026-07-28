@@ -14,7 +14,7 @@ import {
 import { formatDate } from '../lib/format';
 import { isCampaignLive } from '../lib/campaignStatus';
 import {
-  campaignIdsForActivity, isActivityActive, claimableCampaignsForActivity, joinedCampaignIds,
+  campaignIdsForActivity, isActivityActive, claimableCampaignsForActivity, joinedCampaignIds, hasActiveClaim,
 } from '../lib/access';
 import type { PillColor } from '../components/ui';
 import type { Abs_activities, Abs_activityclaims } from '../data/entities';
@@ -84,6 +84,10 @@ export default function ActivitiesScreen() {
       return campaigns.filter((c) => joined.has(c.abs_campaignid) && isCampaignLive(c));
     },
     [campaigns, participations, currentChampion],
+  );
+  const joinedLiveCampaignIds = useMemo(
+    () => new Set(joinedLiveCampaigns.map((c) => c.abs_campaignid)),
+    [joinedLiveCampaigns],
   );
 
   // Activity ids a champion can access = linked to a joined+live campaign.
@@ -184,6 +188,11 @@ export default function ActivitiesScreen() {
   async function submitClaim() {
     if (!currentChampion) { toast.error('No champion record found for you.'); return; }
     if (!claimFor || !claimForm.campaign) { toast.error('Select a campaign for this claim.'); return; }
+    if (hasActiveClaim(currentChampion.abs_championid, claimFor.abs_activityid, claimForm.campaign, claims)) {
+      toast.error('You have already claimed this activity for the selected campaign.');
+      setClaimFor(null);
+      return;
+    }
     setSaving(true);
     try {
       const selfClaimed = claimFor.crd49_validationmode === ValidationMode.SelfClaimed
@@ -330,7 +339,10 @@ export default function ActivitiesScreen() {
                 const linkedIds = campaignIdsForActivity(a.abs_activityid, campaignActivities);
                 const linkedNames = linkedIds.map((cid) => campaignById.get(cid)?.abs_name).filter(Boolean) as string[];
                 const active = isActivityActive(a.abs_activityid, campaignActivities, campaignById);
-                const claimable = claimableCampaignsForActivity(a.abs_activityid, currentChampion?.abs_championid, campaignActivities, participations, campaignById);
+                const claimable = claimableCampaignsForActivity(a.abs_activityid, currentChampion?.abs_championid, campaignActivities, participations, campaignById, claims);
+                // Joined+live campaigns this activity is in, where the champion has already claimed it.
+                const alreadyClaimedHere = !!currentChampion && campaignIdsForActivity(a.abs_activityid, campaignActivities)
+                  .some((cid) => joinedLiveCampaignIds.has(cid) && hasActiveClaim(currentChampion.abs_championid, a.abs_activityid, cid, claims));
                 return (
                   <div className={`card entity-card${active ? '' : ' campaign-expired'}`} key={a.abs_activityid}>
                     <div className="ec-head">
@@ -356,6 +368,8 @@ export default function ActivitiesScreen() {
                       </button>
                     ) : !active ? (
                       <span className="help-text">This activity's campaign is inactive.</span>
+                    ) : alreadyClaimedHere ? (
+                      <span className="help-text">✓ You've already claimed this activity.</span>
                     ) : currentChampion ? (
                       <span className="help-text">Join this activity's campaign to claim it.</span>
                     ) : (
@@ -467,7 +481,7 @@ export default function ActivitiesScreen() {
           <Field label="Campaign" help="You can only claim under a live campaign you've joined that includes this activity.">
             <select className="select" value={claimForm.campaign} onChange={(e) => setClaimForm({ ...claimForm, campaign: e.target.value })}>
               <option value="">Select a campaign…</option>
-              {claimableCampaignsForActivity(claimFor.abs_activityid, currentChampion?.abs_championid, campaignActivities, participations, campaignById).map((c) => <option key={c.abs_campaignid} value={c.abs_campaignid}>{c.abs_name}</option>)}
+              {claimableCampaignsForActivity(claimFor.abs_activityid, currentChampion?.abs_championid, campaignActivities, participations, campaignById, claims).map((c) => <option key={c.abs_campaignid} value={c.abs_campaignid}>{c.abs_name}</option>)}
             </select>
           </Field>
           <Field label="Notes"><textarea className="textarea" value={claimForm.notes} onChange={(e) => setClaimForm({ ...claimForm, notes: e.target.value })} placeholder="Anything the approver should know…" /></Field>
