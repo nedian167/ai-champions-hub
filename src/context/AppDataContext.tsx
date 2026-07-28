@@ -4,11 +4,11 @@ import { getContext } from '@microsoft/power-apps/app';
 import {
   ChampionsSvc, DepartmentsSvc, CampaignsSvc, CampaignDepartmentsSvc, CampaignActivitiesSvc,
   CampaignParticipationsSvc, ActivitiesSvc, ActivityClaimsSvc, ClaimEvidencesSvc, EventsSvc,
-  RequestsSvc, ProgramSettingsSvc, AppAdminsSvc,
+  RequestsSvc, ProgramSettingsSvc, AppAdminsSvc, RequestCategoriesSvc,
   type Abs_champions, type Abs_departments, type Abs_campaigns, type Abs_campaigndepartments,
   type Abs_campaignactivities, type Abs_campaignparticipations, type Abs_activities,
   type Abs_activityclaims, type Abs_claimevidences, type Abs_events, type Abs_requests,
-  type Abs_programsettingses, type Abs_appadmins,
+  type Abs_programsettingses, type Abs_appadmins, type Abs_requestcategories,
 } from '../data/entities';
 import { ChampionRole, ClaimStatus } from '../lib/enums';
 
@@ -47,6 +47,7 @@ interface AppDataValue {
   evidence: Abs_claimevidences[];
   events: Abs_events[];
   requests: Abs_requests[];
+  requestCategories: Abs_requestcategories[];
   settings: Abs_programsettingses | null;
   appAdmins: Abs_appadmins[];
 
@@ -55,6 +56,7 @@ interface AppDataValue {
   departmentById: Map<string, Abs_departments>;
   campaignById: Map<string, Abs_campaigns>;
   activityById: Map<string, Abs_activities>;
+  requestCategoryById: Map<string, Abs_requestcategories>;
 
   /** Points earned (sum of approved-claim activity points) per champion id. */
   pointsByChampion: Map<string, number>;
@@ -86,6 +88,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [evidence, setEvidence] = useState<Abs_claimevidences[]>([]);
   const [events, setEvents] = useState<Abs_events[]>([]);
   const [requests, setRequests] = useState<Abs_requests[]>([]);
+  const [requestCategories, setRequestCategories] = useState<Abs_requestcategories[]>([]);
   const [settings, setSettings] = useState<Abs_programsettingses | null>(null);
   const [appAdmins, setAppAdmins] = useState<Abs_appadmins[]>([]);
   // Whether the last app-admins read actually SUCCEEDED. Distinguishes a genuinely
@@ -98,7 +101,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     // can inspect success (not just the data array) for the bootstrap decision.
     const adminsPromise = AppAdminsSvc.getAll({ top: 5000 });
     const [
-      champ, dept, camp, campDept, campAct, part, act, clm, evid, evt, req, sett,
+      champ, dept, camp, campDept, campAct, part, act, clm, evid, evt, req, sett, reqCat,
     ] = await Promise.all([
       all(ChampionsSvc.getAll({ top: 5000 })),
       all(DepartmentsSvc.getAll({ top: 5000 })),
@@ -112,6 +115,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       all(EventsSvc.getAll({ top: 5000 })),
       all(RequestsSvc.getAll({ top: 5000 })),
       all(ProgramSettingsSvc.getAll({ top: 5 })),
+      all(RequestCategoriesSvc.getAll({ top: 5000 })),
     ]);
     let adminsRes: { success?: boolean; data?: Abs_appadmins[] };
     try {
@@ -130,6 +134,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setEvidence(evid);
     setEvents(evt);
     setRequests(req);
+    setRequestCategories(reqCat);
     setSettings(sett[0] ?? null);
     setAppAdmins(adminsRes.data ?? []);
     // Only trust an empty list when the read explicitly succeeded.
@@ -182,6 +187,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const activityById = useMemo(
     () => new Map(activities.map((a) => [a.abs_activityid, a])),
     [activities],
+  );
+  const requestCategoryById = useMemo(
+    () => new Map(requestCategories.map((c) => [c.abs_requestcategoryid, c])),
+    [requestCategories],
   );
 
   const pointsByChampion = useMemo(() => {
@@ -237,7 +246,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     isBootstrapAdmin,
     champions, departments, campaigns, campaignDepartments, campaignActivities, participations,
     activities, claims, evidence, events, requests, settings, appAdmins,
+    requestCategories,
     championById, departmentById, campaignById, activityById,
+    requestCategoryById,
     pointsByChampion, pointsFor, reload,
   };
 

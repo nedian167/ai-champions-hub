@@ -6,7 +6,7 @@ import { Card, KpiCard, Pill, EmptyState, SearchInput, Field } from '../componen
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import {
-  RequestCategory, RequestCategoryLabel, RequestStatus, RequestStatusLabel, optionsOf,
+  RequestCategoryLabel, RequestStatus, RequestStatusLabel, optionsOf,
 } from '../lib/enums';
 import { formatDate } from '../lib/format';
 import { parseThread, serializeThread, lastMessage, type ThreadMessage } from '../lib/requestThread';
@@ -25,13 +25,13 @@ function statusColor(s?: number): PillColor {
 }
 
 export default function RequestsScreen() {
-  const { requests, championById, currentChampion, currentUser, isAdmin, reload } = useAppData();
+  const { requests, requestCategories, requestCategoryById, championById, currentChampion, currentUser, isAdmin, reload } = useAppData();
   const toast = useToast();
   const location = useLocation();
   const navigate = useNavigate();
 
   const [search, setSearch] = useState('');
-  const [catFilter, setCatFilter] = useState<number | 'all'>('all');
+  const [catFilter, setCatFilter] = useState<string | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<number | 'all' | 'completed'>('all');
   const [showNew, setShowNew] = useState(false);
   const [convo, setConvo] = useState<Abs_requests | null>(null);
@@ -39,7 +39,18 @@ export default function RequestsScreen() {
   const [msgText, setMsgText] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const [form, setForm] = useState({ title: '', category: RequestCategory.License as number, description: '' });
+  const [form, setForm] = useState({ title: '', categoryId: '', description: '' });
+
+  // Category display: prefer the configurable lookup, fall back to the legacy option set
+  // for older rows created before request categories were made admin-configurable.
+  const catLabel = (r: Abs_requests): string => {
+    if (r._abs_category_value) {
+      return requestCategoryById.get(r._abs_category_value)?.abs_name
+        ?? r.abs_categoryname
+        ?? '—';
+    }
+    return RequestCategoryLabel[r.crd49_category] ?? '—';
+  };
 
   const myUpn = (currentUser?.userPrincipalName ?? '').toLowerCase();
   const isOwner = (r: Abs_requests) => {
@@ -62,7 +73,7 @@ export default function RequestsScreen() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return visibleRequests.filter((r) => {
-      if (catFilter !== 'all' && r.crd49_category !== catFilter) return false;
+      if (catFilter !== 'all' && r._abs_category_value !== catFilter) return false;
       if (statusFilter === 'completed') {
         if (r.crd49_status !== RequestStatus.Approved && r.crd49_status !== RequestStatus.Fulfilled) return false;
       } else if (statusFilter !== 'all' && r.crd49_status !== statusFilter) {
@@ -80,11 +91,12 @@ export default function RequestsScreen() {
   async function createRequest() {
     if (!currentChampion) { toast.error('No champion record found for you.'); return; }
     if (!form.title.trim() || !form.description.trim()) { toast.error('Title and description are required.'); return; }
+    if (!form.categoryId) { toast.error('Please choose a category.'); return; }
     setSaving(true);
     try {
       const res = await RequestsSvc.create({
         abs_title: form.title.trim(),
-        crd49_category: form.category,
+        'abs_Category@odata.bind': bind('requestcategory', form.categoryId),
         'crd49_Champion@odata.bind': bind('champion', currentChampion.abs_championid),
         crd49_description: form.description.trim(),
         crd49_status: RequestStatus.Open,
@@ -93,13 +105,18 @@ export default function RequestsScreen() {
       if (!res.success) throw new Error(res.error?.message ?? 'Create failed');
       toast.success('Request submitted.');
       setShowNew(false);
-      setForm({ title: '', category: RequestCategory.License, description: '' });
+      setForm({ title: '', categoryId: '', description: '' });
       await reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to submit request.');
     } finally {
       setSaving(false);
     }
+  }
+
+  function openNew() {
+    setForm({ title: '', categoryId: requestCategories[0]?.abs_requestcategoryid ?? '', description: '' });
+    setShowNew(true);
   }
 
   function openConvo(r: Abs_requests) {
@@ -167,7 +184,7 @@ export default function RequestsScreen() {
           <h1>Requests</h1>
           <div className="page-subtitle">{isAdmin ? 'Triage requests from champions and reply back.' : 'Ask for licenses, connectors and AI support — reply here when the team responds.'}</div>
         </div>
-        {currentChampion && <button className="btn btn-primary" onClick={() => setShowNew(true)}>➕ New Request</button>}
+        {currentChampion && <button className="btn btn-primary" onClick={openNew}>➕ New Request</button>}
       </div>
 
       <div className="grid grid-kpi">
@@ -179,9 +196,9 @@ export default function RequestsScreen() {
 
       <div className="row mt-24">
         <SearchInput value={search} onChange={setSearch} placeholder="Search requests…" />
-        <select className="select" style={{ maxWidth: 220 }} value={catFilter} onChange={(e) => setCatFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
+        <select className="select" style={{ maxWidth: 220 }} value={catFilter} onChange={(e) => setCatFilter(e.target.value)}>
           <option value="all">All Categories</option>
-          {optionsOf(RequestCategoryLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {requestCategories.map((c) => <option key={c.abs_requestcategoryid} value={c.abs_requestcategoryid}>{c.abs_name}</option>)}
         </select>
         <select className="select" style={{ maxWidth: 200 }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value === 'all' ? 'all' : e.target.value === 'completed' ? 'completed' : Number(e.target.value))}>
           <option value="all">All Status</option>
@@ -209,7 +226,7 @@ export default function RequestsScreen() {
                 onKeyDown={canOpen ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openConvo(r); } } : undefined}
               >
                 <div className="ec-head">
-                  <Pill color="gray">{RequestCategoryLabel[r.crd49_category]}</Pill>
+                  <Pill color="gray">{catLabel(r)}</Pill>
                   <Pill color={statusColor(r.crd49_status)}>{RequestStatusLabel[r.crd49_status]}</Pill>
                 </div>
                 <h3>{r.abs_title}</h3>
@@ -245,8 +262,9 @@ export default function RequestsScreen() {
         >
           <Field label="Title"><input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>
           <Field label="Category">
-            <select className="select" value={form.category} onChange={(e) => setForm({ ...form, category: Number(e.target.value) })}>
-              {optionsOf(RequestCategoryLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            <select className="select" value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
+              {requestCategories.length === 0 && <option value="">No categories configured</option>}
+              {requestCategories.map((c) => <option key={c.abs_requestcategoryid} value={c.abs_requestcategoryid}>{c.abs_name}</option>)}
             </select>
           </Field>
           <Field label="Description"><textarea className="textarea" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Describe what you need…" /></Field>
@@ -271,7 +289,7 @@ export default function RequestsScreen() {
             }
           >
             <div className="row" style={{ gap: 8, marginBottom: 4 }}>
-              <Pill color="gray">{RequestCategoryLabel[convo.crd49_category]}</Pill>
+              <Pill color="gray">{catLabel(convo)}</Pill>
               <Pill color={statusColor(convo.crd49_status)}>{RequestStatusLabel[convo.crd49_status]}</Pill>
             </div>
             <div className="item-title">{convo.abs_title}</div>

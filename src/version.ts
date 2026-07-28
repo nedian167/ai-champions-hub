@@ -7,4 +7,4 @@
 //
 // Increasing the solution version on each deploy is what lets an import be
 // applied as an UPGRADE (existing data is preserved) instead of a reset.
-export const APP_VERSION = '1.0.1';
+export const APP_VERSION = '1.0.2';
