@@ -44,6 +44,7 @@ The package contains **only this app's data model** — no unrelated or previous
 | **Reports** *(admin)* — executive KPIs, department & type breakdowns, monthly trend, campaign performance (RAG), CSV / PDF export | ![Reports](docs/screenshots/11-reports.png) |
 | **Customize** — per‑user Light/Dark, font family & size with live preview | ![Customize](docs/screenshots/08-customize.png) |
 | **Settings** — program config, application admins & departments | ![Settings](docs/screenshots/09-settings.png) |
+| **First‑run setup** — the app owner is granted temporary admin on a fresh, unconfigured program and prompted to become the permanent admin | ![First run](docs/screenshots/13-first-run.png) |
 | **App Theme & Branding** *(admin)* — brand color presets or custom hex + app logo upload, applied across the whole app | ![Branding](docs/screenshots/12-branding.png) |
 
 ---
@@ -327,6 +328,33 @@ pac solution import --path .\deploy\solutions\AIChampionsHubApp_managed.zip --pu
 
 Then sign in as an admin and complete first‑run setup in **Settings** (community name/URL,
 SharePoint evidence library URL, departments, admins, branding).
+
+### First‑run experience (who's the first admin?)
+
+A freshly imported program has **no app admins and no champions** yet. To avoid a lock‑out — where
+the person who opens the app first has no way to grant themselves access — the app applies a
+**bootstrap‑admin** rule:
+
+> While **zero app admins** exist, the **signed‑in user is treated as an admin**, so the app owner
+> can open **Settings** and set the program up.
+
+On that first visit, the **Application Admins** card shows a welcome banner with an **“Add me as an
+admin”** button:
+
+![First‑run experience](docs/screenshots/13-first-run.png)
+
+- Clicking **Add me as an admin** writes the signed‑in user into the `abs_appadmin` table as the
+  **permanent** administrator (no champion record required).
+- As soon as **one** app admin exists, the bootstrap rule **switches off automatically** and normal
+  role gating resumes — from then on only Program Managers / App Admins see Settings. The Manage
+  Admins UI never lets the **last** admin be removed, so the program can't fall back into an
+  admin‑less state.
+- Best practice: click **Add me as an admin** first, then add departments, elevate other admins, and
+  fill in program settings.
+
+> **Note:** this bootstraps whoever opens the freshly deployed app first (typically the maker/owner
+> who imported the solution). Add the real administrator right away so access is pinned to a known
+> account.
 
 ---
 
