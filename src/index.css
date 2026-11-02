@@ -963,6 +963,34 @@ h4 {
   bottom: 0;
   background: var(--surface);
 }
+
+.deletion-impact {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.deletion-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0;
+}
+.deletion-confirmation input { margin-top: 3px; flex-shrink: 0; }
+.deletion-activity {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.deletion-activity-row, .deletion-claim {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.deletion-activity details { margin-top: 12px; }
+.deletion-activity summary { cursor: pointer; }
+.deletion-activity, .deletion-impact, .deletion-claim { overflow-wrap: anywhere; }
+.modal:has(.deletion-impact, .deletion-activity) .modal-foot { flex-wrap: wrap; }
 .icon-btn {
   background: none;
   border: none;

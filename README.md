@@ -31,9 +31,12 @@ The package contains **only this app's data model** — no unrelated or previous
 
 ## Screenshots
 
-The v1.0.3 management screenshots use the current React UI with a read-only
+The v1.0.3 management screenshots use the React UI with a read-only
 snapshot of the Contoso Dev program. Capturing them does not create, edit, or
 delete tenant records.
+The v1.0.4 deletion-workflow screenshots (18-21) use the same app components with
+illustrative, read-only demo records, clearly labeled in the images. They do not
+connect to or modify tenant data.
 
 | | |
 |---|---|
@@ -47,7 +50,10 @@ delete tenant records.
 | **Edit event** — update all event fields, including campaign and local date/time | ![Edit event](docs/screenshots/15-event-edit.png) |
 | **Delete event** — named-record confirmation; the linked campaign is preserved | ![Delete event confirmation](docs/screenshots/16-event-delete-confirmation.png) |
 | **Edit activity** — shared activity settings, with points locked once claims exist | ![Edit activity](docs/screenshots/17-activity-edit.png) |
-| **Campaign deletion safeguards** — linked records block deletion to preserve history | ![Campaign deletion blocked](docs/screenshots/18-campaign-delete-blocked.png) |
+| **Guided campaign deletion** — review linked activities individually or select all deletable activities; claims stay protected | ![Guided campaign deletion](docs/screenshots/18-campaign-delete-blocked.png) |
+| **Delete an unclaimed activity** — review every affected campaign before acknowledging removal | ![Activity deletion impact](docs/screenshots/19-activity-delete-review.png) |
+| **Protected activity** — inspect linked claims without removing history or earned points | ![Protected activity claims](docs/screenshots/20-activity-protected-claims.png) |
+| **Delete selected activities** — separate impact review before campaign deletion can proceed | ![Selected activity deletion](docs/screenshots/21-selected-activity-delete.png) |
 | **Leaderboard** — champions / departments / campaigns ranking | ![Leaderboard](docs/screenshots/06-leaderboard.png) |
 | **Requests** — KPIs, filters, top-right **New Request** for every role, and threaded triage | ![Requests](docs/screenshots/07-requests.png) |
 | **Reports** *(admin)* — executive KPIs, department & type breakdowns, monthly trend, campaign performance (RAG), CSV / PDF export | ![Reports](docs/screenshots/11-reports.png) |
@@ -113,13 +119,28 @@ Campaign owners retain their existing campaign-edit access; deletion requires ad
 Activity edits apply to all linked campaigns. Activity points cannot be changed once
 claims exist, so editing does not retroactively change earned points.
 
-Deletion requires confirmation naming the record and cannot be undone. Before enabling
-deletion and again on confirmation, the app checks Dataverse for linked records.
-Campaign deletion is blocked by activity links, audience departments, participants,
-claims, or events; activity deletion is blocked by campaign links or claims.
-Remove those links or records first using the appropriate Dataverse administration tools.
-No related records are automatically deleted. If a dependency check fails, deletion stays
-blocked. Dataverse security roles still govern all writes.
+Deletion requires confirmation naming the record and cannot be undone. The app reads
+the current dependencies from Dataverse, including every page of linked records.
+An **unclaimed activity** can be deleted individually after reviewing all linked campaigns
+and explicitly acknowledging the impact. Its campaign links are removed first; the activity
+is then deleted. Campaigns themselves are kept, including when an activity is shared.
+Any claim (pending, approved, or rejected) protects the activity: the dialog lists those
+claims with links to their details and preserves the activity, links, evidence, and points.
+
+The **campaign deletion dialog** lists every linked activity, with individual deletion
+or selection of all deletable activities. Each selection has a separate impact review and
+confirmation. Activities with claims cannot be selected. Campaign deletion stays disabled
+until all linked activities have been deleted, and still requires its own confirmation.
+Audience departments, participants, claims, or events also protect the campaign; existing
+records are not silently removed to bypass those safeguards.
+
+Dependencies are rechecked before deleting a selection and again during each activity's
+deletion. New claims, changed links, or failed reads stop the operation. These client-side
+operations are not transactional: if a later write fails, earlier deletions or unlinking
+may already have succeeded. The dialog reports partial progress, refreshes the remaining
+records, and requires another review before retrying. Dataverse security and relationship
+rules remain authoritative, including protection against concurrent writes; client checks
+alone cannot make the final dependency check and deletion atomic.
 
 ## Event details and management
 
@@ -411,8 +432,8 @@ admin”** button:
 
 ### Versioning & upgrades (don't reset existing data)
 
-The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.3`) and is the
-same number carried by the deployable solution (`v1.0.3` in the app → solution version `1.0.3.0`).
+The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.4`) and is the
+same number carried by the deployable solution (`v1.0.4` in the app → solution version `1.0.4.0`).
 
 **To ship an update to a tenant that already has the app — without wiping its data — re-import as an
 upgrade with a *higher* version number.** Dataverse only preserves existing rows when the incoming
@@ -430,15 +451,15 @@ Because the version travels *inside* the exported `.zip`, every shipped change m
 
 | Where | File / command | Format |
 | --- | --- | --- |
-| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.3` |
-| npm package | `package.json` → `version` | `1.0.3` |
-| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.3.0` | `1.0.3.0` |
+| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.4` |
+| npm package | `package.json` → `version` | `1.0.4` |
+| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.4.0` | `1.0.4.0` |
 
 **Release checklist for any future change:**
 
-1. Bump `APP_VERSION` in `src/version.ts` and the package/lockfile versions (e.g. `1.0.2` → `1.0.3`).
+1. Bump `APP_VERSION` in `src/version.ts` and the package/lockfile versions (e.g. `1.0.3` → `1.0.4`).
 2. `npm run build`.
-3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.3.0`.
+3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.4.0`.
 4. Re-push + re-bundle the app: `pac code push --solutionName AIChampionsHubApp`.
 5. Re-export both zips: `pac solution export --name AIChampionsHubApp --path .\deploy\solutions\AIChampionsHubApp_managed.zip --managed true --overwrite` (and again `--managed false` for the unmanaged zip).
 6. Commit the bumped sources **and** the refreshed zips together.
@@ -461,6 +482,10 @@ URL that points at `localhost:3000`.)
 ```powershell
 npm run build   # tsc -b && vite build  → dist/
 ```
+
+Run the protected-deletion regression checks with `npm run test:deletion`.
+They use Node's test runner and Vite with in-memory service doubles; no Dataverse
+connection or tenant writes are involved.
 
 ---
 

@@ -1,12 +1,13 @@
 {
   "name": "vite",
   "private": true,
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "test:deletion": "node --test tests/deletion.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

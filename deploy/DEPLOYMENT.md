@@ -171,7 +171,7 @@ The Code App is added to the `AIChampionsHubApp` solution using the Power Platfo
 ```powershell
 # From the repo root, authenticated to the SOURCE env:
 npm run build
-pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.3.0
+pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.4.0
 pac code push --solutionName AIChampionsHubApp
 
 # Then re-export both packages:
