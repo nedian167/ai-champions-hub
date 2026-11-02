@@ -3,6 +3,22 @@
   --app-font-size: 16px;
 }
 
+.outlook-calendar .text-danger {
+  color: var(--red);
+}
+
+.outlook-calendar .checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+.outlook-calendar .checkbox-row input {
+  flex-shrink: 0;
+  margin-top: 0.25rem;
+}
+
 /* ---------- Theme tokens ---------- */
 :root,
 :root[data-theme='light'] {

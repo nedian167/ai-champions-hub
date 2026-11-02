@@ -19,6 +19,7 @@ export const Abs_eventsstatuscode = {
 export type Abs_eventsstatuscode = keyof typeof Abs_eventsstatuscode;
 
 export interface Abs_eventsBase {
+  abs_eventend?: string;
   abs_eventid: string;
   abs_name: string;
   "crd49_Campaign@odata.bind"?: string;

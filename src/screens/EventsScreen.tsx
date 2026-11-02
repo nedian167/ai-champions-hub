@@ -4,14 +4,21 @@ import { EventsSvc, bind, type Abs_events } from '../data/entities';
 import { Card, KpiCard, Pill, EmptyState, Field } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { DeleteRecordModal } from '../components/DeleteRecordModal';
+import { OutlookCalendarModal } from '../components/OutlookCalendarModal';
+import { EventScheduleDetails } from '../components/EventScheduleDetails';
 import { useToast } from '../components/Toast';
 import { EventFormat, EventFormatLabel, optionsOf } from '../lib/enums';
-import { formatDate, formatDateTime, toDateTimeInput } from '../lib/format';
+import { formatDate } from '../lib/format';
+import { buildEventSchedule, eventHasNotEnded, eventOccursOnDate, eventScheduleForm, formatEventSchedule } from '../lib/eventSchedule';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const blankForm = () => ({
+  name: '', campaign: '', description: '', date: '', startTime: '', endTime: '', endDate: '', multiDay: false,
+  format: EventFormat.Online as number, location: '', meetinglink: '', imageurl: '',
+});
 
 export default function EventsScreen() {
-  const { events, campaigns, isAdmin, reload } = useAppData();
+  const { events, campaigns, isAdmin, reload, currentUser } = useAppData();
   const toast = useToast();
 
   const [cursor, setCursor] = useState(() => new Date());
@@ -20,15 +27,13 @@ export default function EventsScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Abs_events | null>(null);
+  const [addingToOutlook, setAddingToOutlook] = useState(false);
   const selectedEvent = events.find((event) => event.abs_eventid === selectedId);
-  const [form, setForm] = useState({
-    name: '', campaign: '', description: '', eventdate: '', format: EventFormat.Online as number,
-    location: '', meetinglink: '', imageurl: '',
-  });
+  const [form, setForm] = useState(blankForm);
 
-  // "Upcoming" = today or later (with a 1-day grace); anything earlier is "past".
+  // Keep the existing one-day grace, but include multi-day events until their end.
   const upcomingCutoff = Date.now() - 864e5;
-  const isUpcoming = (e: typeof events[number]) => new Date(e.crd49_eventdate).getTime() >= upcomingCutoff;
+  const isUpcoming = (e: typeof events[number]) => eventHasNotEnded(e, upcomingCutoff);
 
   const upcomingOnline = events.filter((e) => isUpcoming(e) && e.crd49_format === EventFormat.Online).length;
   const upcomingInPerson = events.filter((e) => isUpcoming(e) && e.crd49_format === EventFormat.InPerson).length;
@@ -38,7 +43,7 @@ export default function EventsScreen() {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const detailEvents = useMemo(() => {
     const cutoff = Date.now() - 864e5;
-    const up = (e: typeof events[number]) => new Date(e.crd49_eventdate).getTime() >= cutoff;
+    const up = (e: typeof events[number]) => eventHasNotEnded(e, cutoff);
     const list = detail === 'online'
       ? events.filter((e) => up(e) && e.crd49_format === EventFormat.Online)
       : detail === 'inperson'
@@ -46,7 +51,7 @@ export default function EventsScreen() {
         : detail === 'past'
           ? events.filter((e) => !up(e))
           : detail === 'day' && selectedDay
-            ? events.filter((e) => new Date(e.crd49_eventdate).toDateString() === selectedDay.toDateString())
+            ? events.filter((e) => eventOccursOnDate(e, selectedDay))
             : events;
     return [...list].sort((a, b) => (a.crd49_eventdate ?? '').localeCompare(b.crd49_eventdate ?? ''));
   }, [detail, events, selectedDay]);
@@ -58,7 +63,7 @@ export default function EventsScreen() {
 
   const upcoming = useMemo(
     () => [...events]
-      .filter((e) => new Date(e.crd49_eventdate).getTime() >= Date.now() - 864e5)
+      .filter((e) => eventHasNotEnded(e, Date.now() - 864e5))
       .sort((a, b) => (a.crd49_eventdate ?? '').localeCompare(b.crd49_eventdate ?? '')),
     [events],
   );
@@ -73,9 +78,10 @@ export default function EventsScreen() {
     for (let d = 1; d <= days; d++) cells.push(d);
     const byDay = new Map<number, Abs_events[]>();
     for (const e of events) {
-      const dt = new Date(e.crd49_eventdate);
-      if (dt.getFullYear() === year && dt.getMonth() === month) {
-        byDay.set(dt.getDate(), [...(byDay.get(dt.getDate()) ?? []), e]);
+      for (let day = 1; day <= days; day++) {
+        if (eventOccursOnDate(e, new Date(year, month, day))) {
+          byDay.set(day, [...(byDay.get(day) ?? []), e]);
+        }
       }
     }
     return { cells, byDay, year, month };
@@ -86,7 +92,7 @@ export default function EventsScreen() {
   function openNew() {
     setEditingId(null);
     setSelectedId(null);
-    setForm({ name: '', campaign: '', description: '', eventdate: '', format: EventFormat.Online, location: '', meetinglink: '', imageurl: '' });
+    setForm(blankForm());
     setShow(true);
   }
 
@@ -97,7 +103,7 @@ export default function EventsScreen() {
       name: event.abs_name,
       campaign: event._crd49_campaign_value ?? '',
       description: event.crd49_description ?? '',
-      eventdate: toDateTimeInput(event.crd49_eventdate),
+      ...eventScheduleForm(event),
       format: event.crd49_format,
       location: event.crd49_location ?? '',
       meetinglink: event.crd49_meetinglink ?? '',
@@ -108,9 +114,14 @@ export default function EventsScreen() {
 
   async function saveEvent() {
     if (!isAdmin || saving) return;
-    if (!form.name.trim() || !form.eventdate) { toast.error('Name and date are required.'); return; }
-    const eventdate = new Date(form.eventdate);
-    if (!Number.isFinite(eventdate.getTime())) { toast.error('Choose a valid date and time.'); return; }
+    if (!form.name.trim()) { toast.error('Name is required.'); return; }
+    let schedule: ReturnType<typeof buildEventSchedule>;
+    try {
+      schedule = buildEventSchedule(form, events.find((event) => event.abs_eventid === editingId));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Choose a valid event schedule.');
+      return;
+    }
     const format = Object.values(EventFormat).find((value) => value === form.format);
     if (format === undefined) { toast.error('Choose a valid event format.'); return; }
     for (const [label, value] of [['Meeting link', form.meetinglink], ['Image URL', form.imageurl]]) {
@@ -129,7 +140,8 @@ export default function EventsScreen() {
       const payload = {
         abs_name: form.name.trim(),
         crd49_description: form.description.trim(),
-        crd49_eventdate: eventdate.toISOString(),
+        crd49_eventdate: schedule.start,
+        abs_eventend: schedule.end,
         crd49_format: format,
         crd49_location: form.location.trim(),
         crd49_meetinglink: form.meetinglink.trim(),
@@ -149,7 +161,7 @@ export default function EventsScreen() {
       toast.success(editingId ? 'Event updated.' : 'Event created.');
       setShow(false);
       setEditingId(null);
-      setForm({ name: '', campaign: '', description: '', eventdate: '', format: EventFormat.Online, location: '', meetinglink: '', imageurl: '' });
+      setForm(blankForm());
       await reload();
     } catch (e) {
       const message = e instanceof Error ? e.message : `Failed to ${editingId ? 'update' : 'create'} event.`;
@@ -199,7 +211,7 @@ export default function EventsScreen() {
                 <div className={`cal-cell ${isToday ? 'today' : ''}`} key={d}>
                   <div className="cal-daynum">{d}</div>
                   {evs.slice(0, 2).map((event) => (
-                    <button className="cal-event" key={event.abs_eventid} title={event.abs_name} onClick={() => setSelectedId(event.abs_eventid)}>{event.abs_name}</button>
+                    <button className="cal-event" key={event.abs_eventid} title={`${event.abs_name}: ${formatEventSchedule(event)}`} onClick={() => setSelectedId(event.abs_eventid)}>{event.abs_name}</button>
                   ))}
                   {evs.length > 2 && (
                     <button className="cal-more link" onClick={() => { setSelectedDay(new Date(grid.year, grid.month, d)); setDetail('day'); }}>+{evs.length - 2} more</button>
@@ -226,7 +238,7 @@ export default function EventsScreen() {
                 >
                   <div className="center-col spacer">
                     <span className="item-title">{e.abs_name}</span>
-                    <span className="item-sub">{formatDate(e.crd49_eventdate)} · {e.crd49_location || (e.crd49_format === EventFormat.Online ? 'Online' : 'In-Person')}</span>
+                    <span className="item-sub">{formatEventSchedule(e)} · {e.crd49_location || (e.crd49_format === EventFormat.Online ? 'Online' : 'In-Person')}</span>
                   </div>
                   <Pill color={e.crd49_format === EventFormat.Online ? 'green' : 'purple'}>{EventFormatLabel[e.crd49_format]}</Pill>
                 </div>
@@ -236,7 +248,7 @@ export default function EventsScreen() {
         </Card>
       </div>
 
-      {selectedEvent && !show && !removing && (
+      {selectedEvent && !show && !removing && !addingToOutlook && (
         <Modal
           title={selectedEvent.abs_name}
           wide
@@ -244,6 +256,7 @@ export default function EventsScreen() {
           footer={
             <>
               <button className="btn btn-secondary" onClick={() => setSelectedId(null)}>Close</button>
+              <button className="btn btn-primary" onClick={() => setAddingToOutlook(true)}>Add to my Outlook calendar</button>
               {isAdmin && (
                 <>
                   <button className="btn btn-secondary" onClick={() => openEdit(selectedEvent)}>Edit Event</button>
@@ -254,8 +267,9 @@ export default function EventsScreen() {
           }
         >
           {selectedEvent.crd49_imageurl && <div className="campaign-hero" style={{ backgroundImage: `url("${selectedEvent.crd49_imageurl}")` }} />}
+          <EventScheduleDetails event={selectedEvent} />
+          {!selectedEvent.abs_eventend && <p className="help-text">End time is not set. A program manager or app admin must complete this event's schedule before it can be added to Outlook.</p>}
           <div className="detail-grid">
-            <div><span className="help-text">Date & time</span><div>{formatDateTime(selectedEvent.crd49_eventdate)}</div></div>
             <div><span className="help-text">Format</span><div>{EventFormatLabel[selectedEvent.crd49_format]}</div></div>
             <div><span className="help-text">Location</span><div>{selectedEvent.crd49_location || (selectedEvent.crd49_format === EventFormat.Online ? 'Online' : 'Not specified')}</div></div>
             <div><span className="help-text">Campaign</span><div>{campaigns.find((campaign) => campaign.abs_campaignid === selectedEvent._crd49_campaign_value)?.abs_name ?? selectedEvent.crd49_campaignname ?? 'None'}</div></div>
@@ -268,6 +282,10 @@ export default function EventsScreen() {
               : <p className="text-muted">The meeting link is invalid. Ask a program admin to update it.</p>
           )}
         </Modal>
+      )}
+
+      {selectedEvent && addingToOutlook && (
+        <OutlookCalendarModal key={`${selectedEvent.abs_eventid}:${currentUser?.objectId}:${selectedEvent.crd49_eventdate}:${selectedEvent.abs_eventend}`} event={selectedEvent} onClose={() => setAddingToOutlook(false)} />
       )}
 
       {removing && isAdmin && (
@@ -287,14 +305,27 @@ export default function EventsScreen() {
           }
         >
           <Field label="Name"><input className="input" maxLength={850} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+          <Field label="Schedule">
+            <select className="select" aria-label="Schedule" value={form.multiDay ? 'multi' : 'single'}
+              onChange={(e) => setForm({ ...form, multiDay: e.target.value === 'multi' })}>
+              <option value="single">Single-day event</option>
+              <option value="multi">Multi-day event</option>
+            </select>
+          </Field>
           <div className="field-row">
-            <Field label="Date & time"><input type="datetime-local" className="input" value={form.eventdate} onChange={(e) => setForm({ ...form, eventdate: e.target.value })} /></Field>
-            <Field label="Format">
-              <select className="select" value={form.format} onChange={(e) => setForm({ ...form, format: Number(e.target.value) })}>
-                {optionsOf(EventFormatLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </Field>
+            <Field label="Date"><input type="date" className="input" aria-label="Date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></Field>
+            {form.multiDay && <Field label="End date"><input type="date" className="input" aria-label="End date" required min={form.date} value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} /></Field>}
           </div>
+          <div className="field-row">
+            <Field label="Start time"><input type="time" className="input" aria-label="Start time" required value={form.startTime} onChange={(e) => setForm({ ...form, startTime: e.target.value })} /></Field>
+            <Field label="End time"><input type="time" className="input" aria-label="End time" required value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })} /></Field>
+          </div>
+          <p className="help-text">Times are in {Intl.DateTimeFormat().resolvedOptions().timeZone}. End time must be after Start time; use Multi-day and an End date for overnight events.</p>
+          <Field label="Format">
+            <select className="select" value={form.format} onChange={(e) => setForm({ ...form, format: Number(e.target.value) })}>
+              {optionsOf(EventFormatLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </Field>
           <Field label="Campaign">
             <select className="select" value={form.campaign} onChange={(e) => setForm({ ...form, campaign: e.target.value })}>
               <option value="">None</option>
@@ -328,7 +359,7 @@ export default function EventsScreen() {
                   <div className="center-col spacer">
                     <span className="item-title">{e.abs_name}</span>
                     <span className="item-sub">
-                      {formatDateTime(e.crd49_eventdate)}
+                      {formatEventSchedule(e)}
                       {e.crd49_location ? ` · ${e.crd49_location}` : ''}
                       {e.crd49_meetinglink ? ' · ' : ''}
                       {e.crd49_meetinglink && /^https?:\/\//i.test(e.crd49_meetinglink) && (

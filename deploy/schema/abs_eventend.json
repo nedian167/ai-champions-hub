@@ -1,0 +1,18 @@
+{
+  "@odata.type": "Microsoft.Dynamics.CRM.DateTimeAttributeMetadata",
+  "AttributeType": "DateTime",
+  "AttributeTypeName": { "Value": "DateTimeType" },
+  "SchemaName": "abs_EventEnd",
+  "DisplayName": {
+    "LocalizedLabels": [{ "Label": "Event End", "LanguageCode": 1033 }]
+  },
+  "Description": {
+    "LocalizedLabels": [{
+      "Label": "Event end date and time. Required by the Hub when creating or editing an event; existing events are not automatically backfilled.",
+      "LanguageCode": 1033
+    }]
+  },
+  "RequiredLevel": { "Value": "None" },
+  "DateTimeBehavior": { "Value": "UserLocal" },
+  "Format": "DateAndTime"
+}

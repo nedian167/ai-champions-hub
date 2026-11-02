@@ -17,6 +17,14 @@
         "office365users"
       ],
       "dataSets": {}
+    },
+    "4a638fab-ae75-46e2-b803-6bd2de413cd6": {
+      "id": "/providers/Microsoft.PowerApps/apis/shared_office365",
+      "displayName": "Office 365 Outlook",
+      "dataSources": [
+        "office365"
+      ],
+      "dataSets": {}
     }
   },
   "databaseReferences": {

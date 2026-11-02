@@ -23,7 +23,7 @@ triaging license/connector requests, reporting to leadership, and self‑brandin
 |-------|--------------|----------|
 | **Everything, one package** | `deploy/solutions/AIChampionsHubApp_managed.zip` (and `_unmanaged.zip`) | 14 Dataverse tables, option sets, relationships, **2 ready-to-assign security roles**, **and the bundled Code App** — a single import provisions the whole solution. Publisher **ABSGSA**, prefix `abs` |
 | **App source** | This repository (Vite + React + TypeScript) | The full Code App source; also deployable/updatable directly with `pac code push` |
-| **Connector** | `power.config.json` | **Office 365 Users** (people picker) + the 14 Dataverse data sources |
+| **Connectors** | `power.config.json` | **Office 365 Users** (people picker), **Office 365 Outlook** (personal calendar), and the 14 Dataverse data sources |
 
 The package contains **only this app's data model** — no unrelated or previous app is referenced.
 
@@ -37,6 +37,9 @@ delete tenant records.
 The v1.0.4 deletion-workflow screenshots (18-21) use the same app components with
 illustrative, read-only demo records, clearly labeled in the images. They do not
 connect to or modify tenant data.
+The v1.0.5 event details, multi-day form, and Outlook confirmation screenshots
+(14, 15, and 22) show the actual React components with clearly labeled illustrative
+records and a simulated mailbox. They do not create tenant events or Outlook appointments.
 
 | | |
 |---|---|
@@ -46,8 +49,9 @@ connect to or modify tenant data.
 | **Campaign detail** — overview, audience, activity actions, and campaign **edit / delete** controls | ![Campaign detail](docs/screenshots/10-campaign-detail.png) |
 | **Activities** — catalog + claims, type/campaign filters, and admin **edit / delete** actions | ![Activities](docs/screenshots/04-activities.png) |
 | **Events** — clickable calendar entries and upcoming-event lists | ![Events](docs/screenshots/05-events.png) |
-| **Event details** — date/time, format, location, campaign, description, meeting link, and admin actions | ![Event details](docs/screenshots/14-event-details.png) |
-| **Edit event** — update all event fields, including campaign and local date/time | ![Edit event](docs/screenshots/15-event-edit.png) |
+| **Event details** — separate Date, Start time, End time, optional End date, Outlook action, and admin controls | ![Event details](docs/screenshots/14-event-details.png) |
+| **Edit event** — Single-day / Multi-day selector, explicit dates and times, and other event fields | ![Edit event](docs/screenshots/15-event-edit.png) |
+| **Personal Outlook appointment** — review the exact saved schedule, choose an owned calendar, and confirm the connected mailbox | ![Outlook calendar confirmation](docs/screenshots/22-outlook-calendar.png) |
 | **Delete event** — named-record confirmation; the linked campaign is preserved | ![Delete event confirmation](docs/screenshots/16-event-delete-confirmation.png) |
 | **Edit activity** — shared activity settings, with points locked once claims exist | ![Edit activity](docs/screenshots/17-activity-edit.png) |
 | **Guided campaign deletion** — review linked activities individually or select all deletable activities; claims stay protected | ![Guided campaign deletion](docs/screenshots/18-campaign-delete-blocked.png) |
@@ -89,6 +93,7 @@ flowchart TB
     subgraph pp["Power Platform (target environment)"]
         dv[("Dataverse<br/>13 abs_ tables")]
         o365["Office 365 Users<br/>connector (GAL picker)"]
+        outlook["Office 365 Outlook<br/>personal calendar"]
     end
 
     user --> player
@@ -96,6 +101,7 @@ flowchart TB
     theme --> sdk
     sdk --> dv
     sdk --> o365
+    sdk --> outlook
 ```
 
 **How it fits together**
@@ -108,6 +114,7 @@ flowchart TB
 - **ThemeProvider** applies each champion's personal Light/Dark + font preferences *and* the
   admin‑set application brand color + logo to CSS variables at the document root.
 - The **Office 365 Users** connector powers the GAL people picker used when adding champions.
+- The **Office 365 Outlook** connector supports explicit personal-calendar actions from event details, outside the global Hub data load.
 
 ---
 
@@ -149,7 +156,65 @@ open its full details, including date and time, format, location, campaign,
 description, image, and meeting link. Calendar overflow opens that day's full list.
 All users can view details; program managers and app admins can edit every event
 field or delete the event after confirming its name. Deleting an event does not
-delete its campaign. Date/time editing uses the user's local time.
+delete its campaign.
+
+The event form and details show **Date**, **Start time**, and **End time** separately.
+Choose **Single-day event** or **Multi-day event** in the **Schedule** selector;
+multi-day events also require an **End date** after the start date. An overnight
+event must use Multi-day explicitly; an earlier end time never silently rolls
+forward to tomorrow. Start and end are saved as UTC instants using the viewer's
+local timezone, with nonexistent daylight-saving clock times rejected. Unchanged
+existing instants, including repeated fall-back times, are preserved during edits.
+
+The existing `crd49_eventdate` column remains the start timestamp; optional Dataverse
+column `abs_eventend` stores the end timestamp. Both endpoints are required by the
+app when creating or editing events. Existing records are not backfilled with
+invented durations: they display **Not set** for End time until an admin supplies it.
+Multi-day events appear on every overlapping calendar day and remain in upcoming
+counts until their end (using the existing one-day grace). An event ending at
+midnight does not occupy the following day. Campaign event summaries and event
+reports use the same schedule helpers.
+
+### Personal Outlook calendar
+
+Every signed-in role, including users without a Champion profile, can select
+**Add to my Outlook calendar** in event details. The dialog identifies the connected
+mailbox and lists only its writable, owned calendars; shared/delegated calendars
+are excluded. The saved Hub **Date**, **Start time**, **End time**, and, for multi-day
+events, **End date** are shown before explicit confirmation. Outlook receives those
+exact saved endpoints; there is no separate personal duration or time override.
+Legacy events without an end time must be completed by a program manager or app
+admin first. Times display locally, while appointments use UTC instants to preserve
+the schedule across timezone and daylight-saving transitions.
+
+The native **Office 365 Outlook** connector handles authentication. Each user
+authorizes their own non-shareable connection; no MCP server, client secret, or
+separate Graph OAuth application is required. The connector's supported **Send an
+HTTP request** action calls only Microsoft Graph `/me/calendar` and `/me/calendars`
+endpoints. Tenant DLP, consent, Exchange permissions, and Code Apps licensing
+still apply. Outlook reads are on demand and do not participate in Hub startup.
+Power Apps may nevertheless request connector consent when opening the app;
+the host's connection/consent requirements cannot be bypassed by the dialog.
+
+Only a personal appointment is created, with the Hub title, description, location,
+and existing meeting link. No attendees, invitations, recurrence, or new Teams
+meeting are added. This is a one-time copy: subsequent Hub edits, cancellations,
+or deletion do not update/remove the Outlook copy, and Outlook edits do not change Hub.
+
+An Outlook-side extended property identifies the source Hub event in the selected
+calendar, independent of its title or dates and across browsers/devices. A stable
+Graph `transactionId` and an in-flight guard further reduce duplicate writes.
+Existing copies are shown rather than overwritten. If a response is interrupted,
+the app checks the marker instead of automatically repeating the POST. Unknown
+outcomes remain explicit; use **Check Outlook status** and review Outlook before
+confirming a retry. Removing the marker or moving/copying an appointment to another
+calendar is outside this per-calendar duplicate check.
+
+**Release v1.0.5:** the managed and unmanaged solution packages include the native
+Outlook module and the optional `abs_eventend` column. Existing event records are
+preserved. Each user must authorize their own Outlook connection. Automated and
+illustrative UI checks do not replace a live target-tenant mailbox check; creating
+a real Outlook appointment through the connector has not yet been verified.
 
 ## Request submission
 
@@ -239,6 +304,7 @@ erDiagram
         string  abs_name PK
         string  crd49_description
         date    crd49_eventdate
+        date    abs_eventend "optional schema; required by app on create/edit"
         choice  crd49_format "Online | InPerson | Hybrid"
         string  crd49_location
         string  crd49_meetinglink
@@ -432,8 +498,8 @@ admin”** button:
 
 ### Versioning & upgrades (don't reset existing data)
 
-The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.4`) and is the
-same number carried by the deployable solution (`v1.0.4` in the app → solution version `1.0.4.0`).
+The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.5`) and is the
+same number carried by the deployable solution (`v1.0.5` in the app → solution version `1.0.5.0`).
 
 **To ship an update to a tenant that already has the app — without wiping its data — re-import as an
 upgrade with a *higher* version number.** Dataverse only preserves existing rows when the incoming
@@ -451,15 +517,15 @@ Because the version travels *inside* the exported `.zip`, every shipped change m
 
 | Where | File / command | Format |
 | --- | --- | --- |
-| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.4` |
-| npm package | `package.json` → `version` | `1.0.4` |
-| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.4.0` | `1.0.4.0` |
+| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.5` |
+| npm package | `package.json` → `version` | `1.0.5` |
+| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.5.0` | `1.0.5.0` |
 
 **Release checklist for any future change:**
 
-1. Bump `APP_VERSION` in `src/version.ts` and the package/lockfile versions (e.g. `1.0.3` → `1.0.4`).
+1. Bump `APP_VERSION` in `src/version.ts` and the package/lockfile versions (e.g. `1.0.4` → `1.0.5`).
 2. `npm run build`.
-3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.4.0`.
+3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.5.0`.
 4. Re-push + re-bundle the app: `pac code push --solutionName AIChampionsHubApp`.
 5. Re-export both zips: `pac solution export --name AIChampionsHubApp --path .\deploy\solutions\AIChampionsHubApp_managed.zip --managed true --overwrite` (and again `--managed false` for the unmanaged zip).
 6. Commit the bumped sources **and** the refreshed zips together.
@@ -486,6 +552,11 @@ npm run build   # tsc -b && vite build  → dist/
 Run the protected-deletion regression checks with `npm run test:deletion`.
 They use Node's test runner and Vite with in-memory service doubles; no Dataverse
 connection or tenant writes are involved.
+Run `npm run test:outlook` for the native-calendar service regression checks,
+including permissions, pagination, UTC/DST handling, duplicate prevention, and
+interrupted writes. These also use in-memory doubles and make no Outlook requests.
+Run `npm run test:events` for both event-schedule and Outlook checks, including
+single/multi-day input validation, legacy records, day overlap, and DST-safe editing.
 
 ---
 

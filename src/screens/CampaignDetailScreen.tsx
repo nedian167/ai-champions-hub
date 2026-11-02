@@ -12,6 +12,7 @@ import {
   effectiveCampaignStatus, effectiveStatusColor, effectiveStatusLabel, isCampaignExpired, isCampaignLive,
 } from '../lib/campaignStatus';
 import { computeCampaignHealth } from '../lib/campaignHealth';
+import { formatEventSchedule } from '../lib/eventSchedule';
 
 type Tab = 'activities' | 'participants' | 'events';
 
@@ -370,7 +371,7 @@ export default function CampaignDetailScreen() {
                 <div className="list-item" key={e.abs_eventid}>
                   <div className="center-col spacer">
                     <span className="item-title">{e.abs_name}</span>
-                    <span className="item-sub">{formatDate(e.crd49_eventdate)} · {e.crd49_location || 'Online'}</span>
+                    <span className="item-sub">{formatEventSchedule(e)} · {e.crd49_location || 'Online'}</span>
                   </div>
                 </div>
               ))}

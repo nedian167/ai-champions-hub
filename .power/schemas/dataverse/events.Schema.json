@@ -10,6 +10,13 @@
       "x-ms-dataverse-primary-id": "abs_eventid",
       "x-ms-dataverse-primary-name": "abs_name",
       "properties": {
+        "abs_eventend": {
+          "type": "string",
+          "title": "Event End",
+          "x-ms-dataverse-attribute": "abs_eventend",
+          "x-ms-dataverse-type": "DateTimeType",
+          "x-ms-schema-name": "abs_EventEnd"
+        },
         "abs_eventid": {
           "type": "string",
           "title": "Event",

@@ -19,6 +19,7 @@ export * as Abs_programsettingsesModel from './models/Abs_programsettingsesModel
 export * as Abs_requestcategoriesModel from './models/Abs_requestcategoriesModel';
 export * as Abs_requestsModel from './models/Abs_requestsModel';
 export * as CommonModels from './models/CommonModels';
+export * as Office365OutlookModel from './models/Office365OutlookModel';
 export * as Office365UsersModel from './models/Office365UsersModel';
 
 // Services
@@ -36,4 +37,5 @@ export * from './services/Abs_eventsService';
 export * from './services/Abs_programsettingsesService';
 export * from './services/Abs_requestcategoriesService';
 export * from './services/Abs_requestsService';
+export * from './services/Office365OutlookService';
 export * from './services/Office365UsersService';

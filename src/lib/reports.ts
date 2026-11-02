@@ -13,6 +13,7 @@ import {
 } from './enums';
 import { computeCampaignHealth, type HealthInputs } from './campaignHealth';
 import { effectiveStatusLabel, effectiveCampaignStatus, isCampaignLive } from './campaignStatus';
+import { eventHasNotEnded } from './eventSchedule';
 
 export interface ReportInputs {
   champions: Abs_champions[];
@@ -213,7 +214,7 @@ export function monthlyTrend(i: ReportInputs, months = 6): TrendPoint[] {
 /* ---------------- Events ---------------- */
 export function eventStats(i: ReportInputs) {
   const cutoff = Date.now() - 864e5;
-  const up = (e: Abs_events) => new Date(e.crd49_eventdate).getTime() >= cutoff;
+  const up = (e: Abs_events) => eventHasNotEnded(e, cutoff);
   return {
     total: i.events.length,
     upcoming: i.events.filter(up).length,

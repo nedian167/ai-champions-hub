@@ -18,6 +18,7 @@ import { Abs_requestcategoriesService } from '../generated/services/Abs_requestc
 import { Abs_programsettingsesService } from '../generated/services/Abs_programsettingsesService';
 import { Abs_appadminsService } from '../generated/services/Abs_appadminsService';
 import { Office365UsersService } from '../generated/services/Office365UsersService';
+import { Office365OutlookService } from '../generated/services/Office365OutlookService';
 
 export const ChampionsSvc = Abs_championsService;
 export const DepartmentsSvc = Abs_departmentsService;
@@ -36,6 +37,7 @@ export const AppAdminsSvc = Abs_appadminsService;
 
 /** Office 365 Users connector — Global Address List (GAL) directory lookups. */
 export const DirectorySvc = Office365UsersService;
+export const OutlookSvc = Office365OutlookService;
 
 export type { Abs_champions } from '../generated/models/Abs_championsModel';
 export type { Abs_departments } from '../generated/models/Abs_departmentsModel';

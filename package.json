@@ -1,13 +1,15 @@
 {
   "name": "vite",
   "private": true,
-  "version": "1.0.4",
+  "version": "1.0.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test:deletion": "node --test tests/deletion.test.mjs",
+    "test:outlook": "node --test tests/outlookCalendar.test.mjs",
+    "test:events": "node --test tests/eventSchedule.test.mjs tests/outlookCalendar.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
