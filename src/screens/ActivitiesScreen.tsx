@@ -38,9 +38,13 @@ export default function ActivitiesScreen() {
   const initialActivity = isAdmin
     ? activityById.get((location.state as { editActivityId?: string } | null)?.editActivityId ?? '')
     : undefined;
+  const linkedClaimId = new URLSearchParams(location.search).get('claimId')
+    ?? (location.state as { openClaimId?: string } | null)?.openClaimId ?? null;
+  const linkedClaim = claims.find((claim) => claim.abs_activityclaimid === linkedClaimId
+    && (isAdmin || claim._crd49_champion_value === currentChampion?.abs_championid));
 
   const [tab, setTab] = useState<Tab>(
-    () => ((location.state as { tab?: Tab } | null)?.tab === 'claims' ? 'claims' : 'activities'),
+    () => (linkedClaimId || (location.state as { tab?: Tab } | null)?.tab === 'claims' ? 'claims' : 'activities'),
   );
   const [typeFilter, setTypeFilter] = useState<number | 'all'>('all');
   const [campaignFilter, setCampaignFilter] = useState<string>('all');
@@ -54,7 +58,18 @@ export default function ActivitiesScreen() {
   const [editing, setEditing] = useState<Abs_activities | null>(initialActivity ?? null);
   const [removing, setRemoving] = useState<Abs_activities | null>(null);
   const [claimFor, setClaimFor] = useState<Abs_activities | null>(null);
-  const [detail, setDetail] = useState<Abs_activityclaims | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(linkedClaimId);
+  const detail = claims.find((claim) => claim.abs_activityclaimid === detailId
+    && (isAdmin || claim._crd49_champion_value === currentChampion?.abs_championid)) ?? null;
+  const setDetail = (claim: Abs_activityclaims | null) => setDetailId(claim?.abs_activityclaimid ?? null);
+  const [openedClaimId, setOpenedClaimId] = useState(linkedClaimId);
+  if (openedClaimId !== linkedClaimId) {
+    setOpenedClaimId(linkedClaimId);
+    if (linkedClaimId) {
+      setTab('claims');
+      setDetailId(linkedClaimId);
+    }
+  }
   const [saving, setSaving] = useState(false);
   const autoOpenedRef = useRef<string | null>(null);
 
@@ -126,18 +141,6 @@ export default function ActivitiesScreen() {
     setClaimStatusFilter(status);
     setTab('claims');
   }
-
-  useEffect(() => {
-    const openId = (location.state as { openClaimId?: string } | null)?.openClaimId;
-    if (openId && autoOpenedRef.current !== openId) {
-      const cl = claims.find((c) => c.abs_activityclaimid === openId);
-      if (cl) {
-        autoOpenedRef.current = openId;
-        setTab('claims');
-        setDetail(cl);
-      }
-    }
-  }, [location.state, claims]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -325,6 +328,7 @@ export default function ActivitiesScreen() {
 
   return (
     <>
+      {linkedClaimId && !linkedClaim && <div role="alert" className="card mb-16">This claim is unavailable or you no longer have access to it.</div>}
       <div className="page-header">
         <div>
           <h1>Activities</h1>

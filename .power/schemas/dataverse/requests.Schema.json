@@ -26,6 +26,22 @@
           "x-ms-read-only": true,
           "maxLength": 200
         },
+        "abs_notificationlock": {
+          "type": "string",
+          "title": "abs_notificationlock",
+          "x-ms-dataverse-attribute": "abs_notificationlock",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "abs_notificationlock",
+          "maxLength": 36
+        },
+        "abs_replycommand": {
+          "type": "string",
+          "title": "abs_replycommand",
+          "x-ms-dataverse-attribute": "abs_replycommand",
+          "x-ms-dataverse-type": "MemoType",
+          "x-ms-schema-name": "abs_replycommand",
+          "maxLength": 10000
+        },
         "abs_requestid": {
           "type": "string",
           "title": "Request",
@@ -52,7 +68,6 @@
           "x-ms-dataverse-attribute": "crd49_category",
           "x-ms-dataverse-type": "PicklistType",
           "x-ms-schema-name": "crd49_Category",
-          "required": true,
           "enum": [
             "License Request",
             "Connector Request",
@@ -464,7 +479,6 @@
       "required": [
         "abs_requestid",
         "abs_title",
-        "crd49_category",
         "crd49_champion",
         "crd49_description",
         "crd49_status",

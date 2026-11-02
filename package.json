@@ -1,7 +1,7 @@
 {
   "name": "vite",
   "private": true,
-  "version": "1.0.6",
+  "version": "1.0.7",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,8 @@
     "test:deletion": "node --test tests/deletion.test.mjs",
     "test:outlook": "node --test tests/outlookCalendar.test.mjs",
     "test:events": "node --test tests/eventSchedule.test.mjs tests/outlookCalendar.test.mjs",
+    "test:notifications": "node --test tests/notifications.test.mjs",
+    "test:notifications:backend": "dotnet run --project deploy/notifications/Hub.Notifications.Tests/Hub.Notifications.Tests.csproj --verbosity quiet",
     "preview": "vite preview"
   },
   "dependencies": {

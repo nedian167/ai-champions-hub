@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useRef } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AppDataProvider, useAppData } from './context/AppDataContext';
 import { ChampionStatus } from './lib/enums';
 import { ThemeProvider } from './theme/ThemeProvider';
@@ -15,6 +16,19 @@ import RequestsScreen from './screens/RequestsScreen';
 import ReportsScreen from './screens/ReportsScreen';
 import CustomizeScreen from './screens/CustomizeScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import NotificationsScreen from './screens/NotificationsScreen';
+
+function NotificationLaunch() {
+  const { launchRoute } = useAppData();
+  const navigate = useNavigate();
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!launchRoute || opened.current) return;
+    opened.current = true;
+    navigate(launchRoute, { replace: true });
+  }, [launchRoute, navigate]);
+  return null;
+}
 
 function AccessDisabled({ name }: { name: string }) {
   return (
@@ -59,6 +73,7 @@ function Shell() {
   return (
     <ThemeProvider>
       <ToastProvider>
+        <NotificationLaunch />
         <Routes>
           <Route element={<Layout />}>
             <Route path="/" element={<HomeScreen />} />
@@ -71,6 +86,7 @@ function Shell() {
             <Route path="/requests" element={<RequestsScreen />} />
             <Route path="/reports" element={<ReportsScreen />} />
             <Route path="/customize" element={<CustomizeScreen />} />
+            <Route path="/notifications" element={<NotificationsScreen />} />
             <Route path="/settings" element={<SettingsScreen />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>

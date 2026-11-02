@@ -1,0 +1,8 @@
+{
+  "assemblyPath": ".\\deploy\\notifications\\Hub.Notifications\\bin\\Release\\net462\\Hub.Notifications.dll",
+  "appUrl": "https://apps.powerapps.com/play/e/<ENVIRONMENT_ID>/app/<APP_ID>?tenantId=<TENANT_ID>",
+  "dataverseConnection": "<APPROVED_DATAVERSE_CONNECTION_NAME>",
+  "teamsConnection": "<APPROVED_TEAMS_CONNECTION_NAME>",
+  "outlookConnection": "<APPROVED_OUTLOOK_CONNECTION_NAME>",
+  "enableFlows": false
+}

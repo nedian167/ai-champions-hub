@@ -11,6 +11,7 @@ import {
   type Abs_programsettingses, type Abs_appadmins, type Abs_requestcategories,
 } from '../data/entities';
 import { ChampionRole, ClaimStatus } from '../lib/enums';
+import { notificationLaunch } from '../lib/notifications';
 
 export interface CurrentUser {
   fullName: string;
@@ -23,6 +24,8 @@ interface AppDataValue {
   error?: string;
 
   currentUser: CurrentUser | null;
+  launchRoute: string | null;
+  launchError: string | null;
   currentChampion: Abs_champions | null;
   isProgramManager: boolean;
   isAppAdmin: boolean;
@@ -76,6 +79,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [launchRoute, setLaunchRoute] = useState<string | null>(null);
+  const [launchError, setLaunchError] = useState<string | null>(null);
 
   const [champions, setChampions] = useState<Abs_champions[]>([]);
   const [departments, setDepartments] = useState<Abs_departments[]>([]);
@@ -150,6 +155,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         let user: CurrentUser | null = null;
         try {
           const ctx = await getContext();
+          const launch = notificationLaunch(ctx.app.queryParams ?? {});
+          if (!cancelled) {
+            setLaunchRoute(launch.route);
+            setLaunchError(launch.error);
+          }
           user = {
             fullName: ctx.user.fullName ?? '',
             userPrincipalName: ctx.user.userPrincipalName ?? '',
@@ -242,7 +252,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const isAdmin = isProgramManager || isAppAdmin || isBootstrapAdmin;
 
   const value: AppDataValue = {
-    loading, error, currentUser, currentChampion, isProgramManager, isAppAdmin, isAdmin,
+    loading, error, currentUser, launchRoute, launchError, currentChampion, isProgramManager, isAppAdmin, isAdmin,
     isBootstrapAdmin,
     champions, departments, campaigns, campaignDepartments, campaignActivities, participations,
     activities, claims, evidence, events, requests, settings, appAdmins,

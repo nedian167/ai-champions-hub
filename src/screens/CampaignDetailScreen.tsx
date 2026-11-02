@@ -112,6 +112,7 @@ export default function CampaignDetailScreen() {
         crd49_startdate: new Date(form.startdate).toISOString(),
         crd49_enddate: new Date(form.enddate).toISOString(),
         crd49_status: status,
+        abs_notificationready: true,
         crd49_imageurl: form.imageurl.trim(),
       });
       if (!res.success) throw new Error(res.error?.message ?? 'Update failed');

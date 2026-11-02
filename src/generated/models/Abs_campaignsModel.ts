@@ -22,6 +22,7 @@ export type Abs_campaignsstatuscode = keyof typeof Abs_campaignsstatuscode;
 export interface Abs_campaignsBase {
   abs_campaignid: string;
   abs_name: string;
+  abs_notificationready?: boolean;
   "crd49_CampaignOwner@odata.bind"?: string;
   crd49_description?: string;
   crd49_enddate: string;
@@ -40,6 +41,7 @@ export interface Abs_campaignsBase {
 }
 
 export interface Abs_campaigns extends Abs_campaignsBase {
+  abs_notificationreadyname?: string;
   crd49_campaignownername?: string;
   crd49_statusname?: string;
   createdbyname?: string;

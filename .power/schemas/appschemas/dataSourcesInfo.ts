@@ -82,6 +82,20 @@ export const dataSourcesInfo = {
     "dataSourceType": "Dataverse",
     "apis": {}
   },
+  "abs_notificationdeliveries": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "abs_notificationdeliveryid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
+  "abs_notificationpreferences": {
+    "tableId": "",
+    "version": "",
+    "primaryKey": "abs_notificationpreferenceid",
+    "dataSourceType": "Dataverse",
+    "apis": {}
+  },
   "abs_programsettingses": {
     "tableId": "",
     "version": "",

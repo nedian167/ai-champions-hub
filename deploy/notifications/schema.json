@@ -1,0 +1,64 @@
+{
+  "tables": [
+    {
+      "name": "abs_notificationpreference",
+      "set": "abs_notificationpreferences",
+      "label": "Notification Preference",
+      "plural": "Notification Preferences",
+      "owned": true,
+      "columns": {
+        "abs_entraobjectid": { "type": "string", "length": 36 },
+        "abs_paused": { "type": "boolean" },
+        "abs_requests": { "type": "integer", "max": 3 },
+        "abs_claims": { "type": "integer", "max": 3 },
+        "abs_campaigns": { "type": "integer", "max": 3 },
+        "abs_reminders": { "type": "integer", "max": 3 }
+      }
+    },
+    {
+      "name": "abs_notificationevent",
+      "set": "abs_notificationevents",
+      "label": "Notification Event",
+      "plural": "Notification Events",
+      "owned": false,
+      "columns": {
+        "abs_kind": { "type": "string", "length": 80 },
+        "abs_source": { "type": "string", "length": 80 },
+        "abs_sourceid": { "type": "string", "length": 36 },
+        "abs_actorid": { "type": "string", "length": 36 },
+        "abs_expectedstatus": { "type": "integer", "max": 2147483647 },
+        "abs_state": { "type": "integer", "max": 2 },
+        "abs_page": { "type": "integer", "max": 2147483647 },
+        "abs_cookie": { "type": "memo", "length": 100000 }
+      }
+    },
+    {
+      "name": "abs_notificationdelivery",
+      "set": "abs_notificationdeliveries",
+      "label": "Notification Delivery",
+      "plural": "Notification Deliveries",
+      "owned": true,
+      "columns": {
+        "abs_kind": { "type": "string", "length": 80 },
+        "abs_source": { "type": "string", "length": 80 },
+        "abs_sourceid": { "type": "string", "length": 36 },
+        "abs_actorid": { "type": "string", "length": 36 },
+        "abs_expectedstatus": { "type": "integer", "max": 2147483647 },
+        "abs_recipientobjectid": { "type": "string", "length": 36 },
+        "abs_channel": { "type": "integer", "max": 2 },
+        "abs_state": { "type": "integer", "max": 5 },
+        "abs_error": { "type": "string", "length": 1000 },
+        "abs_senton": { "type": "datetime" }
+      }
+    }
+  ],
+  "addColumns": {
+    "abs_request": {
+      "abs_replycommand": { "type": "memo", "length": 10000 },
+      "abs_notificationlock": { "type": "string", "length": 36 }
+    },
+    "abs_campaign": {
+      "abs_notificationready": { "type": "boolean" }
+    }
+  }
+}

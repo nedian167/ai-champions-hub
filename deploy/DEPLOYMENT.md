@@ -3,13 +3,16 @@
 This guide takes the app from zero to running in a **brand-new Power Platform environment**
 (a different tenant is fully supported).
 
-The solution package now ships the **complete solution in a single `.zip`** — the 13 `abs_`
-tables (columns, option sets, relationships), **two security roles**, **and the React Code App
-itself** (bundled as a Canvas/Code App component, preview ALM feature). So a single
+The solution package now ships the **complete solution in a single `.zip`** — the 17 `abs_`
+tables (columns, option sets, relationships), **two security roles**, the notification
+plug-in/API and two native flows, **and the React Code App itself**
+(bundled as a Canvas/Code App component, preview ALM feature). So a single
 **solution import** provisions the data model, the roles, *and* the app.
 
-You then only need to wire up **connections** (Dataverse + Office 365 Users + Office 365 Outlook) in the target and
-publish. Deploying the app from source with `pac code push` is still available as an alternative /
+You then need to wire up app **connections** (Dataverse + Office 365 Users + personal
+Office 365 Outlook), bind the separate Dataverse/Teams/Outlook automation connection
+references, assign roles, and verify/enable notification flows in the target.
+Deploying the app from source with `pac code push` is still available as an alternative /
 for pushing code updates (see Part 2, Option B).
 
 > **What's in the package.** Only the AI Champions Hub solution — data model + roles + the
@@ -26,6 +29,7 @@ for pushing code updates (see Part 2, Option B).
 | Power Platform CLI | `pac` **2.14+** — <https://aka.ms/PowerPlatformCLI> |
 | Node.js / npm | Node **24+**, npm **11+** |
 | Connections | **Office 365 Users** (people picker) and per-user **Office 365 Outlook** (personal calendar) connections in the target env. |
+| Notification automation | Approved, licensed sender with target-environment Dataverse, Microsoft Teams and Office 365 Outlook connections; Teams Workflows app and DLP/consent policies must allow delivery. |
 
 Authenticate the CLI against the **target** environment before you start:
 
@@ -61,18 +65,25 @@ This creates the tables below (publisher **ABSGSA**, prefix `abs`):
 
 `abs_champion`, `abs_department`, `abs_campaign`, `abs_campaigndepartment`,
 `abs_campaignactivity`, `abs_campaignparticipation`, `abs_activity`, `abs_activityclaim`,
-`abs_claimevidence`, `abs_event`, `abs_request`, `abs_programsettings`, `abs_appadmin`.
+`abs_claimevidence`, `abs_event`, `abs_request`, `abs_requestcategory`,
+`abs_programsettings`, `abs_appadmin`, `abs_notificationpreference`,
+`abs_notificationevent`, `abs_notificationdelivery`.
 
 ### Grant table access (security roles ship in the package)
 
 The solution **ships two custom security roles**, so importing it in a new tenant **auto-creates
-them** — you do **not** create roles by hand. Both grant privileges at **Organization** depth on
-all 13 `abs_` tables:
+them** — you do **not** create roles by hand. Existing business-table privileges
+remain at **Organization** depth on the 14 business tables:
 
-| Role | Privileges on all 13 tables | Assign to |
+| Role | Business-table privileges | Assign to |
 | --- | --- | --- |
 | **AI Champions Hub Users** | Create · Read · Write · Append · Append To | Champions |
 | **AI Champions Hub Admins** | Create · Read · Write · Append · Append To · **Delete** | Program managers / app admins |
+
+Notification access is deliberately narrower: both roles grant preference
+Create/Read/Write and delivery Read at **Basic/user depth only**. They do not grant
+outbox writes or the trusted worker API privilege. Do not copy the business-table
+Organization-depth grants to notification tables.
 
 After import (and **Publish all customizations**), assign the roles in
 **Power Platform admin center → Environment → Settings → Users + permissions → Users** (or the
@@ -184,11 +195,12 @@ organizations requiring signed scripts can use the maker UI instead.
 
 Then run `pac code add-data-source -a dataverse -t abs_event` and build. Do not edit
 generated TypeScript manually. The checked-in managed and unmanaged solution
-archives are version 1.0.6.0 and include this column and the updated Code App.
+archives are version 1.0.7.0 and include this column, the notification backend/flows,
+and the updated Code App.
 
 ### Outlook connection and rollout
 
-The Outlook module is included in the v1.0.6 app and v1.0.6.0 solution packages.
+The Outlook module is included in the v1.0.7 app and v1.0.7.0 solution packages.
 Import the updated solution or build and push the source above to enable it.
 
 Office 365 Outlook is a **non-shareable, per-user connection**. The developer's
@@ -263,7 +275,7 @@ The Code App is added to the `AIChampionsHubApp` solution using the Power Platfo
 ```powershell
 # From the repo root, authenticated to the SOURCE env:
 npm run build
-pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.6.0
+pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.7.0
 pac code push --solutionName AIChampionsHubApp
 
 # Then re-export both packages:
@@ -272,3 +284,213 @@ pac solution export --name AIChampionsHubApp --path .\deploy\solutions\AIChampio
 ```
 
 Re-run this whenever the app changes so the shipped `.zip` files carry the latest build.
+
+---
+
+## Notification module source deployment
+
+**Release v1.0.7:** both solution ZIPs include Notifications and its backend,
+connection references, and two native flows. On import, bind the target environment's
+approved automation connections and verify the app URL/roles before enabling flows.
+The source installer below is for building/upgrading the backend from source; it
+is not an extra requirement after importing a complete package. A local build or
+successful import does not verify Teams policies, mail delivery, connection
+authorization, or end-user Dataverse permissions.
+
+### Backend and connection ownership
+
+The additive schema is in `notifications\schema.json`. It creates user-owned
+`abs_notificationpreference` and `abs_notificationdelivery`, an organization-owned
+`abs_notificationevent` outbox, request reply-command/lock columns, and campaign
+audience-readiness. Existing business data is retained. The installer marks existing
+campaigns ready before initially registering launch capture, avoiding historical
+launch notifications.
+
+The signed .NET Framework 4.6.2 plug-in captures business changes synchronously;
+outbox creation participates in the original business transaction. Request replies
+are authenticated append commands with a stable message GUID, not browser rewrites
+of the entire thread. Concurrent replies acquire a request lock; retries with the
+same ID/text do not create a second message.
+
+Use an explicitly approved automation owner with Dataverse, Microsoft Teams and
+Office 365 Outlook connections **in the target environment**. The chosen development
+setup uses the existing administrator connections. Production needs a licensed,
+maintained automation identity, an approved sender mailbox, and tenant-specific
+least-privilege review. Do not silently substitute another account or connection.
+Teams must allow the Workflows app and private Flow bot cards; the supplied poster
+targets commercial tenants, not GCC/GCCH/DoD. DLP and connector consent still apply.
+
+Both Hub roles receive only **Basic/user-depth** preference Create/Read/Write and
+delivery Read. Do not copy their original business-table Organization-depth grants
+to these private tables. Outbox/delivery writes remain trusted-server operations.
+The global `abs_NotificationWork` API requires `prvPublishCustomization`; never grant
+that privilege to ordinary Hub users. This is a trusted development worker boundary,
+not a ready-made least-privilege production automation role.
+
+### Install from the repository root
+
+1. Import the base Hub solution and verify its two security roles first.
+2. Keep a strong-name signing key outside Git, generated with `sn.exe -k` (Visual
+   Studio Developer Command Prompt) or your approved signing tooling. Securely back
+   up that same key for upgrades; do not generate a different key for an existing
+   assembly. The project requires the private key path at build time:
+
+   ```powershell
+   dotnet build .\deploy\notifications\Hub.Notifications\Hub.Notifications.csproj --configuration Release -p:NotificationSigningKey="<PRIVATE_KEY_PATH>"
+   dotnet run --project .\deploy\notifications\Hub.Notifications.Tests\Hub.Notifications.Tests.csproj
+   npm run test:notifications
+   ```
+
+3. Copy `notifications\configuration.example.json` to a private deployment directory
+   and replace every placeholder. `assemblyPath` resolves from the working directory.
+   Use the canonical HTTPS Power Apps player URL, not a local preview. Keep
+   `enableFlows` **false** during installation and verification.
+4. Run `Connect-Dataverse.ps1` with the intended organization, tenant, organization
+   ID, and administrator's Entra object ID. It verifies the organization and account
+   before invoking a deployment action, keeps authorization in memory, and does not
+   write credentials. Each invocation requires device sign-in:
+
+   ```powershell
+   $target = @{
+     OrganizationUrl = 'https://<ORGANIZATION>.crm.dynamics.com/'
+     TenantId = '<TENANT_ID>'
+     ExpectedOrganizationId = '<DATAVERSE_ORGANIZATION_ID>'
+     ExpectedUserObjectId = '<APPROVED_ADMIN_ENTRA_OBJECT_ID>'
+   }
+   .\deploy\notifications\Connect-Dataverse.ps1 @target `
+     -ActionScript .\deploy\notifications\Install-Schema.ps1
+   .\deploy\notifications\Connect-Dataverse.ps1 @target `
+     -ActionScript .\deploy\notifications\Install-Backend.ps1 `
+     -ActionArguments @{ ConfigurationPath = '<PRIVATE_CONFIGURATION_PATH>' }
+   .\deploy\notifications\Connect-Dataverse.ps1 @target `
+     -ActionScript .\deploy\notifications\Test-Backend.ps1
+   ```
+
+   Respect organizational PowerShell execution policy. If a process-only override is
+   approved, use it only for that invocation; do not change machine policy.
+
+5. In **Solutions > AIChampionsHubApp**, inspect the three tables, request/campaign
+   columns, assembly and nine steps, custom API, both security roles, app URL
+   environment variable, three connection references, and two flows. Confirm
+   connection authorization and solution membership before exporting. Normal users
+   must be unable to read another user's preferences/history or invoke the worker.
+6. Regenerate native frontend bindings against the same target, then build:
+
+   ```powershell
+   pac code add-data-source --apiId dataverse --table abs_notificationpreference
+   pac code add-data-source --apiId dataverse --table abs_notificationdelivery
+   pac code add-data-source --apiId dataverse --table abs_request
+   pac code add-data-source --apiId dataverse --table abs_campaign
+   npm run build
+   ```
+
+   Keep generated services/schemas unedited. The background Teams/email connections
+   belong to the flows; users' personal Outlook calendar connection is independent.
+
+7. Verify an explicitly authorized, isolated Teams/email test before rollout.
+   Never opt in users or send bulk/test messages without their permission. After
+   `Test-Backend.ps1` succeeds, the following sends **one private Teams card and one
+   email** to the signed-in, explicitly approved administrator:
+
+   ```powershell
+   .\deploy\notifications\Connect-Dataverse.ps1 @target `
+     -ActionScript .\deploy\notifications\Test-Delivery.ps1 `
+     -ActionArguments @{
+       ApprovedMailbox = '<APPROVED_ADMIN_MAILBOX>'
+       AllowTestNotifications = $true
+     }
+   ```
+
+   This requires both main flows disabled, all preferences off, and an existing
+   unique administrator Champion profile. It uses real request capture and worker
+   preparation, then temporarily activates a copy of the saved dispatcher restricted
+   to the temporary request, administrator, and two exact delivery IDs. It restores
+   the original request/pause preferences without overwriting concurrent edits.
+   Successful tests remove the temporary flow and records; unconfirmed sends retain
+   the disabled flow and evidence for investigation, with no automatic resend.
+   Diagnostic flows are created outside the versioned app solution and must not be
+   included in release exports.
+   `Channels = 'Teams'` or `Channels = 'Email'` in `ActionArguments` limits a newly
+   authorized test to that channel; do not repeat a successful channel to diagnose
+   another. A new test does not reset or retry an earlier uncertain delivery.
+   Connector acceptance is not recipient read confirmation. Enable
+   **AI Champions Hub - Deliver notifications** and **AI Champions Hub - Daily
+   reminders** only after successful native flow validation. The installer can
+   activate them when `enableFlows` is explicitly true. Publishing the frontend,
+   versioning/re-exporting solution ZIPs, and updating GitHub are separate release
+   operations; this installer does not perform them.
+
+   After publishing the frontend, an already-installed backend can be activated
+   without re-registering its assembly or capture steps:
+
+   ```powershell
+   .\deploy\notifications\Connect-Dataverse.ps1 @target `
+     -ActionScript .\deploy\notifications\Publish-Notifications.ps1 `
+     -ActionArguments @{
+       ConfigurationPath = '<PRIVATE_CONFIGURATION_PATH>'
+       ExpectedSolutionVersion = '1.0.7.0'
+     }
+   ```
+
+   This checks the configured connection bindings and online solution version,
+   excludes any retained disabled diagnostic flows from the versioned solution
+   without deleting their evidence, and verifies both production flows are active.
+   Run it before exporting the release packages. It never changes user preferences.
+
+### Operation and recovery
+
+Users start off and choose channels separately for requests, claims, campaigns and
+reminders. Preferences are stamped from the authenticated Dataverse identity, not a
+browser-supplied recipient. A Champion profile is not needed to manage preferences.
+Only persistent program managers/app admins receive reviewer alerts; temporary
+first-run UI administration is not a notification reviewer role.
+
+The dispatcher runs every minute with serialized runs and deliveries. It prepares
+up to five event-recipient pages per invocation and up to 100 pending deliveries.
+Recipient pages contain 25 preferences. Row-version comparisons protect queue
+claims. A delivery is authorized only after rechecking current consent, account,
+source and audience. Campaign creation saves Draft first and publishes its chosen
+status only after checked audience links are complete; retry partial setup rather
+than creating another campaign.
+
+Daily reminders run at **07:00 UTC**: Open/InReview requests and pending claims
+untouched for at least 48 hours go to reviewers; live joined campaigns ending within
+seven UTC days go to participants; events starting in the next 24 hours go to their
+relevant participants/reviewers (or active Champions for unlinked events). Daily
+source/event IDs prevent duplicate reminder events for the same UTC date.
+
+Monitor Power Automate run history plus the event/delivery tables. Event states are
+0 pending, 2 leased, 1 complete; delivery states are 0 pending, 1 sending, 2 sent,
+3 failed, 4 uncertain, 5 skipped. Interrupted event leases become eligible again
+after 15 minutes; stable delivery IDs prevent a second fanout. Interrupted sends
+become uncertain after 15 minutes and are **not automatically resent**. Sending
+actions have no automatic retry and no email/Teams fallback. Sent means connector
+acceptance, not recipient read confirmation. Investigate the connector run and
+destination before any manual resend; there is no exactly-once guarantee.
+
+If flow save reports `GetUnifiedActionSchema` authorization failure for Teams,
+refresh connection health with `pac connection list --environment <TARGET_ENVIRONMENT_ID>`.
+A connection can move from Connected to Error during deployment. Repair it or
+explicitly select another healthy connection owned by the same approved automation
+account, update `teamsConnection`, and rerun the installer to rebind both the
+connection reference and the flow. Do not silently use a different identity.
+Dataverse device sign-in does not reauthorize a Teams connector. Confirm the
+Power Automate account **and environment ID** before repairing or creating a
+connection: a connection in the same tenant's Default environment is not a
+connection in the target development environment.
+An Outlook connection can likewise change to Error when a send exercises stale
+authorization. Repair that connection separately with the approved sender account.
+A successful Teams send does not prove email authorization, and repairing a
+connection does not confirm the outcome of an earlier unconfirmed send.
+Do not treat a saved Dataverse draft or a Connected label alone as
+proof that the flow can run. Keep delivery disabled until save/activation succeeds.
+Do not delete queued data or reset uncertain sends to pending as a blanket repair.
+Retention of preferences/history/outbox data should follow the target tenant's
+approved policy; no automatic purge is configured.
+
+The included backend verification is a development check with outbound flows off
+and recipients opted out. It creates a clearly named temporary request for the
+administrator's existing, unique Champion profile, checks server-stamped idempotent
+replies and outbox capture, and removes only those temporary records. It never sends
+Teams cards or email. Use the same signing key when rebuilding; sandbox deployment
+must remain dependency-free apart from the platform SDK/framework assemblies.

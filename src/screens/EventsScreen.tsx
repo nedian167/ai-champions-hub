@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
 import { EventsSvc, bind, type Abs_events } from '../data/entities';
 import { Card, KpiCard, Pill, EmptyState, Field } from '../components/ui';
@@ -20,11 +21,18 @@ const blankForm = () => ({
 export default function EventsScreen() {
   const { events, campaigns, isAdmin, reload, currentUser } = useAppData();
   const toast = useToast();
+  const location = useLocation();
+  const linkedEventId = new URLSearchParams(location.search).get('eventId');
 
   const [cursor, setCursor] = useState(() => new Date());
   const [show, setShow] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(linkedEventId);
+  const [openedEventId, setOpenedEventId] = useState(linkedEventId);
+  if (openedEventId !== linkedEventId) {
+    setOpenedEventId(linkedEventId);
+    setSelectedId(linkedEventId);
+  }
   const [editingId, setEditingId] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Abs_events | null>(null);
   const [addingToOutlook, setAddingToOutlook] = useState(false);
@@ -175,6 +183,7 @@ export default function EventsScreen() {
 
   return (
     <>
+      {linkedEventId && !events.some((event) => event.abs_eventid === linkedEventId) && <div role="alert" className="card mb-16">This event is unavailable or you no longer have access to it.</div>}
       <div className="page-header">
         <div>
           <h1>Events</h1>

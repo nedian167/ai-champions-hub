@@ -3,7 +3,7 @@
 **A complete, end‑to‑end Power Apps solution for running an AI / Copilot enablement program.**
 
 AI Champions Hub is delivered as a **fresh, self‑contained solution** — importing it into any
-Power Platform environment provisions the entire **Dataverse data model** (14 tables, option sets
+Power Platform environment provisions the entire **Dataverse data model** (17 tables, option sets
 and relationships), **two ready-to-assign security roles**, **and the React Code App itself** —
 all in one solution import. Nothing is assumed to
 pre‑exist: you get the database, the app, and the connector wiring from scratch.
@@ -15,15 +15,21 @@ triaging license/connector requests, reporting to leadership, and self‑brandin
 > **Deploying to a new tenant?** Follow **[`deploy/DEPLOYMENT.md`](./deploy/DEPLOYMENT.md)** — it
 > walks through importing the schema solution and pushing the Code App, end to end.
 
+> **v1.0.7 includes native notifications:** the Notifications screen, private
+> preferences/history, signed Dataverse plug-in, outbox, and two Power Automate
+> flows are included in both solution packages. Users start opted out.
+> Configure the target environment's automation connections before enabling flows;
+> see [notification deployment](./deploy/DEPLOYMENT.md#notification-module-source-deployment).
+
 ---
 
 ## What's in the box
 
 | Layer | Delivered as | Contents |
 |-------|--------------|----------|
-| **Everything, one package** | `deploy/solutions/AIChampionsHubApp_managed.zip` (and `_unmanaged.zip`) | 14 Dataverse tables, option sets, relationships, **2 ready-to-assign security roles**, **and the bundled Code App** — a single import provisions the whole solution. Publisher **ABSGSA**, prefix `abs` |
+| **Everything, one package** | `deploy/solutions/AIChampionsHubApp_managed.zip` (and `_unmanaged.zip`) | 17 Dataverse tables, option sets, relationships, **2 ready-to-assign security roles**, signed notification plug-in/custom API, two native flows, **and the bundled Code App**. Connections and flow activation require target-environment configuration. Publisher **ABSGSA**, prefix `abs` |
 | **App source** | This repository (Vite + React + TypeScript) | The full Code App source; also deployable/updatable directly with `pac code push` |
-| **Connectors** | `power.config.json` | **Office 365 Users** (people picker), **Office 365 Outlook** (personal calendar), and the 14 Dataverse data sources |
+| **Connectors** | `power.config.json` and solution connection references | **Office 365 Users** (people picker), **Office 365 Outlook** (personal calendar), Dataverse app sources, and separate administrator-owned Dataverse/Teams/Outlook automation connections |
 
 The package contains **only this app's data model** — no unrelated or previous app is referenced.
 
@@ -40,6 +46,8 @@ connect to or modify tenant data.
 The v1.0.5 event details, multi-day form, and Outlook confirmation screenshots
 (14, 15, and 22) show the actual React components with clearly labeled illustrative
 records and a simulated mailbox. They do not create tenant events or Outlook appointments.
+The v1.0.7 Notifications screenshot (23) uses the real screen with clearly labeled
+illustrative settings, no tenant connection, and no outbound sends.
 
 | | |
 |---|---|
@@ -60,6 +68,7 @@ records and a simulated mailbox. They do not create tenant events or Outlook app
 | **Delete selected activities** — separate impact review before campaign deletion can proceed | ![Selected activity deletion](docs/screenshots/21-selected-activity-delete.png) |
 | **Leaderboard** — champions / departments / campaigns ranking | ![Leaderboard](docs/screenshots/06-leaderboard.png) |
 | **Requests** — KPIs, filters, top-right **New Request** for every role, and threaded triage | ![Requests](docs/screenshots/07-requests.png) |
+| **Notifications** — off-by-default channel preferences, pause control, and private delivery history | ![Notification preferences](docs/screenshots/23-notifications.png) |
 | **Reports** *(admin)* — executive KPIs, department & type breakdowns, monthly trend, campaign performance (RAG), CSV / PDF export | ![Reports](docs/screenshots/11-reports.png) |
 | **Customize** — per‑user Light/Dark, font family & size with live preview | ![Customize](docs/screenshots/08-customize.png) |
 | **Settings** — program config, application admins & departments | ![Settings](docs/screenshots/09-settings.png) |
@@ -76,7 +85,7 @@ flowchart TB
 
     subgraph player["Power Apps Player"]
         subgraph app["AI Champions Hub — Code App (Vite + React + TS)"]
-            screens["Screens (11 routes)"]
+            screens["Screens (12 routes)"]
             shared["Shared UI<br/>KPI cards · pills · avatars · charts · modals"]
             ctx["AppDataContext<br/>loads tables · role flags · points roll-up"]
             theme["ThemeProvider<br/>per-user theme + app brand color/logo"]
@@ -91,9 +100,12 @@ flowchart TB
     sdk["Power Apps Code SDK<br/>(@pa-client/power-code-sdk)"]
 
     subgraph pp["Power Platform (target environment)"]
-        dv[("Dataverse<br/>13 abs_ tables")]
+        dv[("Dataverse<br/>17 abs_ tables")]
         o365["Office 365 Users<br/>connector (GAL picker)"]
         outlook["Office 365 Outlook<br/>personal calendar"]
+        capture["Notification plug-in<br/>transactional outbox + worker API"]
+        flows["Native Power Automate flows<br/>dispatch + daily reminders"]
+        channels["Private Teams cards<br/>+ notification email"]
     end
 
     user --> player
@@ -102,6 +114,9 @@ flowchart TB
     sdk --> dv
     sdk --> o365
     sdk --> outlook
+    dv --> capture
+    flows --> capture
+    flows --> channels
 ```
 
 **How it fits together**
@@ -109,7 +124,7 @@ flowchart TB
 - **Screens** (one per route) render the UI and call into a single **`AppDataContext`** that loads
   every table once, exposes lookup maps + the signed‑in user, computes role flags
   (`isAdmin` / `isProgramManager` / `isAppAdmin`) and the points roll‑up.
-- **Generated, typed services** (regenerated by `pac code add‑data‑source`) are the only path to
+- **Generated, typed services** (regenerated by `pac code add‑data‑source`) and typed notification SDK calls are the only path to
   Dataverse — no raw fetch. The **Code SDK** handles auth and transport.
 - **ThemeProvider** applies each champion's personal Light/Dark + font preferences *and* the
   admin‑set application brand color + logo to CSS variables at the document root.
@@ -117,6 +132,30 @@ flowchart TB
 - The **Office 365 Outlook** connector supports explicit personal-calendar actions from event details, outside the global Hub data load.
 
 ---
+
+## Notification preferences
+
+The app includes **Notifications** for every signed-in role, including people without
+a Champion profile. Every category starts **Off**; users choose Teams, email, both,
+or neither, and can pause delivery without losing their choices. The screen also
+shows their latest 25 delivery records and explicit failure/uncertain states.
+
+Native Dataverse plug-ins capture requests/replies/status changes, claims/decisions,
+and completed campaign launches into a durable outbox. Solution-aware Power Automate
+flows deliver private Teams Adaptive Cards and/or email using administrator-owned
+development connections. Recipients, access and preferences are checked again before
+each send. Notification links open the corresponding Hub record; approvals remain
+inside the authenticated app.
+
+Pending requests/claims untouched for 48 hours, joined campaigns ending within seven
+days, and relevant events starting in the next 24 hours are checked daily at **07:00
+UTC**. Reviewer alerts go to persistent program managers/app admins; personal
+decisions and replies go to the requester/claimant. Campaign launches respect the
+configured department audience.
+
+Delivery is not exactly-once: a connector timeout can leave an uncertain outcome.
+Such messages are not automatically resent or redirected to another channel.
+Digests, quiet hours and approvals inside cards are not included.
 
 ## Editing and deleting campaigns and activities
 
@@ -239,8 +278,11 @@ profile and request creation operations.
 
 ## Data model
 
-Importing the solution creates these 14 tables (publisher **ABSGSA**, prefix `abs`; several
-columns carry the legacy `crd49_` prefix). Choice columns are integers with base `839560000`;
+Importing the solution creates 17 tables: the 14 business tables shown below, plus
+`abs_notificationpreference` (user-owned channel settings), `abs_notificationevent`
+(trusted transactional outbox), and `abs_notificationdelivery` (private delivery history).
+Publisher **ABSGSA**, prefix `abs`; several
+columns carry the legacy `crd49_` prefix. Choice columns are integers with base `839560000`;
 all values + labels live in [`src/lib/enums.ts`](./src/lib/enums.ts).
 
 ```mermaid
@@ -433,9 +475,9 @@ erDiagram
 ## Tech stack
 
 - **Vite 7** + **React 19** + **TypeScript** (strict)
-- **React Router** for the 11 client routes
+- **React Router** for the 12 client routes
 - **Power Apps Code SDK** (`@pa-client/power-code-sdk`) — auth + Dataverse + connector access
-- **Dataverse** — 14 tables provisioned by the solution package
+- **Dataverse** — 17 tables provisioned by the solution package
 - No charting library — Reports charts are lightweight inline SVG/CSS components
 
 ---
@@ -452,25 +494,32 @@ pac auth create --environment <TARGET_ENVIRONMENT_ID>
 # 2. Import the whole solution — tables + roles + the bundled Code App
 pac solution import --path .\deploy\solutions\AIChampionsHubApp_managed.zip --publish-changes
 
-# 3. In make.powerapps.com (target env) → Connections, create a Microsoft Dataverse
-#    connection and an Office 365 Users connection, then open Apps → play the app.
+# 3. Configure app connections, assign roles, and bind the three notification
+#    automation connection references in the TARGET environment before enabling flows.
 ```
 
 **A single solution import provisions everything** — no separate app deployment step:
 
-- The 14 Dataverse tables, option sets and relationships.
-- **Two security roles** — **AI Champions Hub Users** (Create/Read/Write/Append/Append To on all 14
-  tables) and **AI Champions Hub Admins** (same **+ Delete**). Assign **Users** to champions and
+- The 17 Dataverse tables, option sets and relationships, plus the notification plug-in/API and flows.
+- **Two security roles** — **AI Champions Hub Users** (business-table access) and
+  **AI Champions Hub Admins** (additional business-table delete access).
+  Both grant notification preference Create/Read/Write and delivery Read at **user depth only**;
+  outbox writes and worker execution remain trusted-server operations. Assign **Users** to champions and
   **Admins** to program managers / app admins; no manual role setup needed.
 - The **"AI Champions Hub (Code)" app** itself — the Code App is **bundled inside the solution**
   (packaged with `power-apps push --solution-id`), so it lands in the target as an installed app.
 
-**After import, two things are still done by hand in the target environment:**
+**After import, configure the target environment:**
 
 1. **Create the connections.** In `make.powerapps.com` → **Connections**, add a **Microsoft Dataverse**
    connection and an **Office 365 Users** connection (Code Apps bind connectors client‑side, so these
    don't travel inside the solution). Then **Apps → AI Champions Hub (Code) → Play**.
 2. **Assign the two security roles** to your users (as above).
+3. **Configure notifications.** Bind the Dataverse, Teams and Outlook automation
+   connection references to the approved sender's target-environment connections,
+   verify the app URL and permissions, then validate/enable the two flows using the
+   [notification deployment guide](./deploy/DEPLOYMENT.md#notification-module-source-deployment).
+   No user is opted in automatically.
 
 > ⚠️ **Caveat — Code App ALM is in preview.** The bundled app ships in the `.zip`, but if the imported
 > app can't resolve its connections automatically on first play, redeploy it from source with
@@ -509,8 +558,8 @@ admin”** button:
 
 ### Versioning & upgrades (don't reset existing data)
 
-The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.6`) and is the
-same number carried by the deployable solution (`v1.0.6` in the app → solution version `1.0.6.0`).
+The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.7`) and is the
+same number carried by the deployable solution (`v1.0.7` in the app → solution version `1.0.7.0`).
 
 **To ship an update to a tenant that already has the app — without wiping its data — re-import as an
 upgrade with a *higher* version number.** Dataverse only preserves existing rows when the incoming
@@ -528,15 +577,15 @@ Because the version travels *inside* the exported `.zip`, every shipped change m
 
 | Where | File / command | Format |
 | --- | --- | --- |
-| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.6` |
-| npm package | `package.json` → `version` | `1.0.6` |
-| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.6.0` | `1.0.6.0` |
+| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.7` |
+| npm package | `package.json` → `version` | `1.0.7` |
+| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.7.0` | `1.0.7.0` |
 
 **Release checklist for any future change:**
 
-1. Bump `APP_VERSION` in `src/version.ts` and the package/lockfile versions (e.g. `1.0.5` → `1.0.6`).
+1. Bump `APP_VERSION` in `src/version.ts` and the package/lockfile versions (e.g. `1.0.6` → `1.0.7`).
 2. `npm run build`.
-3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.6.0`.
+3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.7.0`.
 4. Re-push + re-bundle the app: `pac code push --solutionName AIChampionsHubApp`.
 5. Re-export both zips: `pac solution export --name AIChampionsHubApp --path .\deploy\solutions\AIChampionsHubApp_managed.zip --managed true --overwrite` (and again `--managed false` for the unmanaged zip).
 6. Commit the bumped sources **and** the refreshed zips together.

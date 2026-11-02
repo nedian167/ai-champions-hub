@@ -30,6 +30,37 @@
           "required": true,
           "maxLength": 850
         },
+        "abs_notificationready": {
+          "type": "string",
+          "title": "abs_notificationready",
+          "x-ms-dataverse-attribute": "abs_notificationready",
+          "x-ms-dataverse-type": "BooleanType",
+          "x-ms-schema-name": "abs_notificationready",
+          "enum": [
+            "No",
+            "Yes"
+          ],
+          "x-ms-enum-values": [
+            0,
+            1
+          ],
+          "Color": [
+            null,
+            null
+          ],
+          "x-ms-optionsetmetadataid": "54d3c2c2-ced6-f111-84e8-3833c5eb03fe",
+          "x-ms-isGlobal": false,
+          "x-ms-optionsetdisplayname": "abs_notificationready",
+          "x-ms-optionSetType": "Boolean"
+        },
+        "abs_notificationreadyname": {
+          "type": "string",
+          "title": "abs_notificationreadyname",
+          "x-ms-dataverse-attribute": "abs_notificationreadyname",
+          "x-ms-dataverse-type": "VirtualType",
+          "x-ms-schema-name": "abs_notificationreadyName",
+          "x-ms-read-only": true
+        },
         "crd49_campaignowner": {
           "type": "string",
           "title": "Campaign Owner",

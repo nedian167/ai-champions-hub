@@ -162,7 +162,7 @@ export function requestsByCategory(i: ReportInputs): { label: string; value: num
       label = nameById.get(r._abs_category_value) ?? r.abs_categoryname ?? 'Uncategorized';
     } else {
       // Legacy rows created before categories became a lookup.
-      label = RequestCategoryLabel[r.crd49_category] ?? 'Uncategorized';
+      label = RequestCategoryLabel[r.crd49_category ?? -1] ?? 'Uncategorized';
     }
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }

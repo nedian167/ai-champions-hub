@@ -13,6 +13,7 @@ const NAV: { to: string; label: string; icon: string; adminOnly?: boolean }[] = 
   { to: '/requests', label: 'Requests', icon: '📨' },
   { to: '/reports', label: 'Reports', icon: '📊', adminOnly: true },
   { to: '/customize', label: 'Customize', icon: '🎨' },
+  { to: '/notifications', label: 'Notifications', icon: '🔔' },
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ];
 
@@ -26,6 +27,7 @@ const TITLES: Record<string, string> = {
   '/requests': 'Requests',
   '/reports': 'Reports',
   '/customize': 'Customize',
+  '/notifications': 'Notifications',
   '/settings': 'Settings',
 };
 
@@ -42,7 +44,7 @@ function CommunityButton() {
 }
 
 export default function Layout() {
-  const { currentUser, currentChampion, isProgramManager, isAppAdmin, isAdmin, settings } = useAppData();
+  const { currentUser, currentChampion, isProgramManager, isAppAdmin, isAdmin, settings, launchError } = useAppData();
   const loc = useLocation();
   const base = '/' + (loc.pathname.split('/')[1] ?? '');
   const title = TITLES[base] ?? 'AI Champions Hub';
@@ -92,6 +94,7 @@ export default function Layout() {
         </header>
         <main>
           <div className="page">
+            {launchError && <div role="alert" className="card mb-16">{launchError}</div>}
             <Outlet />
           </div>
         </main>

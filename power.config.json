@@ -86,6 +86,14 @@
           "entitySetName": "abs_requestcategories",
           "logicalName": "abs_requestcategory",
           "isHidden": false
+        },
+        "notificationpreferences": {
+          "entitySetName": "abs_notificationpreferences",
+          "logicalName": "abs_notificationpreference"
+        },
+        "notificationdeliveries": {
+          "entitySetName": "abs_notificationdeliveries",
+          "logicalName": "abs_notificationdelivery"
         }
       },
       "environmentVariableName": ""

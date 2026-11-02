@@ -5,6 +5,8 @@
 export type ThreadAuthor = 'admin' | 'requester';
 
 export interface ThreadMessage {
+  id?: string;
+  actor?: string;
   by: ThreadAuthor;
   name: string;
   text: string;
@@ -21,6 +23,8 @@ function normalizeMessage(m: unknown): ThreadMessage | null {
   const o = m as Record<string, unknown>;
   if (typeof o.text !== 'string' || !o.text) return null;
   return {
+    ...(typeof o.id === 'string' ? { id: o.id } : {}),
+    ...(typeof o.actor === 'string' ? { actor: o.actor } : {}),
     by: o.by === 'requester' ? 'requester' : 'admin',
     name: typeof o.name === 'string' && o.name ? o.name : (o.by === 'requester' ? 'Requester' : 'Admin'),
     text: o.text,

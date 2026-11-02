@@ -9,7 +9,7 @@ import {
   ChampionRole, ChampionStatus, RequestCategoryLabel, RequestStatus, RequestStatusLabel, optionsOf,
 } from '../lib/enums';
 import { formatDate } from '../lib/format';
-import { parseThread, serializeThread, lastMessage, type ThreadMessage } from '../lib/requestThread';
+import { parseThread, lastMessage } from '../lib/requestThread';
 import type { PillColor } from '../components/ui';
 import type { Abs_champions, Abs_requests } from '../data/entities';
 
@@ -34,11 +34,10 @@ export default function RequestsScreen() {
   const [catFilter, setCatFilter] = useState<string | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<number | 'all' | 'completed'>('all');
   const [showNew, setShowNew] = useState(false);
-  const [convo, setConvo] = useState<Abs_requests | null>(null);
-  const [convoStatus, setConvoStatus] = useState<number>(RequestStatus.Open);
   const [msgText, setMsgText] = useState('');
   const [saving, setSaving] = useState(false);
   const [createdChampion, setCreatedChampion] = useState<Abs_champions | null>(null);
+  const replyAttempt = useRef<{ id: string; text: string } | null>(null);
 
   const [form, setForm] = useState({ title: '', categoryId: '', description: '', departmentId: '' });
   const requesterChampion = currentChampion ?? createdChampion;
@@ -51,7 +50,7 @@ export default function RequestsScreen() {
         ?? r.abs_categoryname
         ?? '—';
     }
-    return RequestCategoryLabel[r.crd49_category] ?? '—';
+    return RequestCategoryLabel[r.crd49_category ?? -1] ?? '—';
   };
 
   const myUpn = (currentUser?.userPrincipalName ?? '').toLowerCase();
@@ -61,16 +60,28 @@ export default function RequestsScreen() {
     return !!myUpn && (champ?.abs_userid ?? '').toLowerCase() === myUpn;
   };
 
-  const myName = currentUser?.fullName
-    || requesterChampion?.crd49_displayname
-    || (isAdmin ? 'Administrator' : 'Requester');
-
   // Admins triage every request; a champion only sees and manages their own.
   const visibleRequests = useMemo(
     () => (isAdmin ? requests : requests.filter(isOwner)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [requests, isAdmin, requesterChampion, myUpn, championById],
   );
+  const targetId = new URLSearchParams(location.search).get('requestId')
+    ?? (location.state as { openRequestId?: string } | null)?.openRequestId ?? null;
+  const linkedRequest = targetId ? visibleRequests.find((request) => request.abs_requestid === targetId) : undefined;
+  const [linkedId, setLinkedId] = useState(targetId);
+  const [convoId, setConvoId] = useState<string | null>(targetId);
+  const convo = visibleRequests.find((request) => request.abs_requestid === convoId) ?? null;
+  const setConvo = (request: Abs_requests | null) => setConvoId(request?.abs_requestid ?? null);
+  const [convoStatus, setConvoStatus] = useState<number | null>(null);
+  if (targetId !== linkedId) {
+    setLinkedId(targetId);
+    if (targetId) {
+      setConvoId(targetId);
+      setConvoStatus(null);
+      setMsgText('');
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -177,58 +188,47 @@ export default function RequestsScreen() {
   }
 
   function openConvo(r: Abs_requests) {
+    replyAttempt.current = null;
     setConvo(r);
-    setConvoStatus(r.crd49_status);
+    setConvoStatus(null);
     setMsgText('');
   }
 
-  // Auto-open a request when navigated here from another screen (e.g. Home).
-  const autoOpenedRef = useRef<string | null>(null);
   useEffect(() => {
-    const targetId = (location.state as { openRequestId?: string } | null)?.openRequestId;
-    if (!targetId || autoOpenedRef.current === targetId) return;
-    const target = requests.find((r) => r.abs_requestid === targetId);
-    if (target && (isAdmin || isOwner(target))) {
-      autoOpenedRef.current = targetId;
-      openConvo(target);
-      // Clear the navigation state so it doesn't re-open on back/refresh.
-      navigate(location.pathname, { replace: true, state: null });
+    if ((location.state as { openRequestId?: string } | null)?.openRequestId) {
+      navigate(location.pathname + location.search, { replace: true, state: null });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location, requests, navigate]);
+  }, [location, navigate]);
 
   async function sendMessage() {
-    if (!convo) return;
+    if (!convo || saving) return;
     const admin = isAdmin;
     const text = msgText.trim();
     if (!text && !admin) { toast.error('Enter a message before sending.'); return; }
 
-    const messages = parseThread(convo.crd49_response);
-    if (text) {
-      const msg: ThreadMessage = {
-        by: admin ? 'admin' : 'requester',
-        name: myName,
-        text,
-        at: new Date().toISOString(),
-      };
-      messages.push(msg);
+    if (text.length > 4000) { toast.error('Replies must contain no more than 4000 characters.'); return; }
+    if (text && replyAttempt.current?.text !== text) {
+      replyAttempt.current = { id: crypto.randomUUID(), text };
     }
-
     setSaving(true);
+    let saved = false;
     try {
       const payload: Record<string, unknown> = {};
-      if (messages.length) payload.crd49_response = serializeThread(messages);
-      if (admin) payload.crd49_status = convoStatus;
+      if (text) payload.abs_replycommand = JSON.stringify(replyAttempt.current);
+      if (admin && convoStatus !== null && convoStatus !== convo.crd49_status) payload.crd49_status = convoStatus;
       if (!Object.keys(payload).length) { setConvo(null); return; }
 
       const res = await RequestsSvc.update(convo.abs_requestid, payload as never);
       if (!res.success) throw new Error(res.error?.message ?? 'Update failed');
+      saved = true;
+      replyAttempt.current = null;
       toast.success(admin ? 'Request updated.' : 'Reply sent.');
       setConvo(null);
       setMsgText('');
       await reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to send message.');
+      const message = e instanceof Error ? e.message : 'Failed to send message.';
+      toast.error(saved ? `Request saved, but refresh failed: ${message}` : message);
     } finally {
       setSaving(false);
     }
@@ -236,6 +236,7 @@ export default function RequestsScreen() {
 
   return (
     <>
+      {targetId && !linkedRequest && <div role="alert" className="card mb-16">This request is unavailable or you no longer have access to it.</div>}
       <div className="page-header">
         <div>
           <h1>Requests</h1>
@@ -385,7 +386,7 @@ export default function RequestsScreen() {
             <div className="divider" />
             {isAdmin && (
               <Field label="Status">
-                <select className="select" value={convoStatus} onChange={(e) => setConvoStatus(Number(e.target.value))}>
+                <select className="select" value={convoStatus ?? convo.crd49_status} onChange={(e) => setConvoStatus(Number(e.target.value))}>
                   {optionsOf(RequestStatusLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </Field>

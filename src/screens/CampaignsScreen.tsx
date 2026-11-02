@@ -42,6 +42,7 @@ export default function CampaignsScreen() {
   const [tab, setTab] = useState<Tab>('active');
   const [show, setShow] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pendingCampaignId, setPendingCampaignId] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Abs_campaigns | null>(null);
   const [form, setForm] = useState({
     name: '', theme: '', description: '', startdate: toDateInput(new Date().toISOString()),
@@ -126,6 +127,11 @@ export default function CampaignsScreen() {
       toast.error('End date must be on or after the start date.');
       return;
     }
+    const status = Object.values(CampaignStatus).find((value) => value === form.status);
+    if (status === undefined) {
+      toast.error('Choose a valid campaign status.');
+      return;
+    }
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
@@ -134,26 +140,52 @@ export default function CampaignsScreen() {
         crd49_description: form.description.trim() || undefined,
         crd49_startdate: new Date(form.startdate).toISOString(),
         crd49_enddate: new Date(form.enddate).toISOString(),
-        crd49_status: form.status,
+        crd49_status: CampaignStatus.Draft,
         crd49_imageurl: form.imageurl.trim() || undefined,
       };
       if (form.owner) payload['crd49_CampaignOwner@odata.bind'] = bind('champion', form.owner);
-      const res = await CampaignsSvc.create(payload as never);
-      if (!res.success || !res.data) throw new Error(res.error?.message ?? 'Create failed');
-      const campaignId = res.data.abs_campaignid;
-      for (const deptId of form.departments) {
-        await CampaignDepartmentsSvc.create({
-          abs_name: `${form.name.trim()} audience`,
-          'abs_Campaign@odata.bind': bind('campaign', campaignId),
-          'abs_Department@odata.bind': bind('department', deptId),
-        } as never);
+      let campaignId = pendingCampaignId;
+      if (!campaignId) {
+        const res = await CampaignsSvc.create(payload as never);
+        if (!res.success || !res.data) throw new Error(res.error?.message ?? 'Create failed');
+        campaignId = res.data.abs_campaignid;
+        setPendingCampaignId(campaignId);
+      }
+      const saved = await CampaignsSvc.get(campaignId);
+      if (!saved.success || !saved.data) throw new Error(saved.error?.message ?? 'Could not confirm the saved campaign.');
+      if (!saved.data.abs_notificationready) {
+        if (saved.data.crd49_status !== CampaignStatus.Draft) {
+          throw new Error('The saved campaign was changed elsewhere. Review it before completing audience setup.');
+        }
+        for (const deptId of form.departments) {
+          const existing = await CampaignDepartmentsSvc.getAll({
+            filter: `_abs_campaign_value eq ${campaignId} and _abs_department_value eq ${deptId}`,
+            top: 2,
+          });
+          if (!existing.success || !existing.data) throw new Error(existing.error?.message ?? 'Could not check the saved audience.');
+          if (existing.data.length > 1) throw new Error('The saved campaign has duplicate audience links. Ask an administrator to repair them.');
+          if (existing.data.length) continue;
+          const link = await CampaignDepartmentsSvc.create({
+            abs_name: `${form.name.trim()} audience`,
+            'abs_Campaign@odata.bind': bind('campaign', campaignId),
+            'abs_Department@odata.bind': bind('department', deptId),
+          } as never);
+          if (!link.success) throw new Error(link.error?.message ?? 'Could not save an audience department.');
+        }
+        const launch = await CampaignsSvc.update(campaignId, {
+          crd49_status: status,
+          abs_notificationready: true,
+        });
+        if (!launch.success) throw new Error(launch.error?.message ?? 'Could not confirm campaign setup.');
       }
       toast.success('Campaign created.');
+      setPendingCampaignId(null);
       setShow(false);
       setForm({ name: '', theme: '', description: '', startdate: toDateInput(new Date().toISOString()), enddate: '', status: CampaignStatus.Draft, owner: '', imageurl: '', departments: [] });
       await reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to create campaign.');
+      const message = e instanceof Error ? e.message : 'Failed to create campaign.';
+      toast.error(`Campaign setup was not completed or could not be confirmed: ${message} Retry to check the saved campaign before creating another.`);
     } finally {
       setSaving(false);
     }
@@ -288,10 +320,12 @@ export default function CampaignsScreen() {
           footer={
             <>
               <button className="btn btn-secondary" onClick={() => setShow(false)}>Cancel</button>
-              <button className="btn btn-primary" disabled={saving} onClick={createCampaign}>{saving ? 'Saving…' : 'Create Campaign'}</button>
+              <button className="btn btn-primary" disabled={saving} onClick={createCampaign}>{saving ? 'Saving…' : pendingCampaignId ? 'Retry campaign setup' : 'Create Campaign'}</button>
             </>
           }
         >
+          {pendingCampaignId && <p role="status">A campaign was saved. Retry to finish or confirm its audience and launch without creating another campaign.</p>}
+          <fieldset disabled={saving || !!pendingCampaignId} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
           <Field label="Name"><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
           <div className="field-row">
             <Field label="Theme"><input className="input" value={form.theme} onChange={(e) => setForm({ ...form, theme: e.target.value })} placeholder="e.g. Copilot Basics" /></Field>
@@ -335,6 +369,7 @@ export default function CampaignsScreen() {
               })}
             </div>
           </Field>
+          </fieldset>
         </Modal>
       )}
     </>

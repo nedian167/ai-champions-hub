@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Dataverse plug-in build outputs and local strong-name keys
+deploy/notifications/**/bin/
+deploy/notifications/**/obj/
+*.snk
