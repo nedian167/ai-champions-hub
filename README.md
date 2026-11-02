@@ -31,16 +31,25 @@ The package contains **only this app's data model** — no unrelated or previous
 
 ## Screenshots
 
+The v1.0.3 management screenshots use the current React UI with a read-only
+snapshot of the Contoso Dev program. Capturing them does not create, edit, or
+delete tenant records.
+
 | | |
 |---|---|
 | **Home** — five KPI cards (incl. *Campaigns At Risk* & *Trending Campaign*), pending claims, open requests, completion donut, top champions | ![Home](docs/screenshots/01-home.png) |
 | **Champions** — KPIs, search + status/department filters, per‑card admin **edit / disable / remove** | ![Champions](docs/screenshots/02-champions.png) |
-| **Campaigns** — banner‑image cards grouped into Active / Drafts / Expired / Completed with health badges | ![Campaigns](docs/screenshots/03-campaigns.png) |
-| **Campaign detail** — banner header, health score, overview, audience, activities / participants / events tabs | ![Campaign detail](docs/screenshots/10-campaign-detail.png) |
-| **Activities** — catalog + claims, filter by type **and campaign**, evidence upload, approve / reject | ![Activities](docs/screenshots/04-activities.png) |
-| **Events** — month calendar + upcoming list | ![Events](docs/screenshots/05-events.png) |
+| **Campaigns** — banner‑image cards grouped by status, health badges, and admin **edit / delete** actions | ![Campaigns](docs/screenshots/03-campaigns.png) |
+| **Campaign detail** — overview, audience, activity actions, and campaign **edit / delete** controls | ![Campaign detail](docs/screenshots/10-campaign-detail.png) |
+| **Activities** — catalog + claims, type/campaign filters, and admin **edit / delete** actions | ![Activities](docs/screenshots/04-activities.png) |
+| **Events** — clickable calendar entries and upcoming-event lists | ![Events](docs/screenshots/05-events.png) |
+| **Event details** — date/time, format, location, campaign, description, meeting link, and admin actions | ![Event details](docs/screenshots/14-event-details.png) |
+| **Edit event** — update all event fields, including campaign and local date/time | ![Edit event](docs/screenshots/15-event-edit.png) |
+| **Delete event** — named-record confirmation; the linked campaign is preserved | ![Delete event confirmation](docs/screenshots/16-event-delete-confirmation.png) |
+| **Edit activity** — shared activity settings, with points locked once claims exist | ![Edit activity](docs/screenshots/17-activity-edit.png) |
+| **Campaign deletion safeguards** — linked records block deletion to preserve history | ![Campaign deletion blocked](docs/screenshots/18-campaign-delete-blocked.png) |
 | **Leaderboard** — champions / departments / campaigns ranking | ![Leaderboard](docs/screenshots/06-leaderboard.png) |
-| **Requests** — KPIs, filters, submit + threaded triage | ![Requests](docs/screenshots/07-requests.png) |
+| **Requests** — KPIs, filters, top-right **New Request** for every role, and threaded triage | ![Requests](docs/screenshots/07-requests.png) |
 | **Reports** *(admin)* — executive KPIs, department & type breakdowns, monthly trend, campaign performance (RAG), CSV / PDF export | ![Reports](docs/screenshots/11-reports.png) |
 | **Customize** — per‑user Light/Dark, font family & size with live preview | ![Customize](docs/screenshots/08-customize.png) |
 | **Settings** — program config, application admins & departments | ![Settings](docs/screenshots/09-settings.png) |
@@ -95,6 +104,41 @@ flowchart TB
 - The **Office 365 Users** connector powers the GAL people picker used when adding champions.
 
 ---
+
+## Editing and deleting campaigns and activities
+
+Program managers and application admins can use **Edit** and **Delete** on campaign
+cards, campaign details, activity cards, and activities listed inside a campaign.
+Campaign owners retain their existing campaign-edit access; deletion requires admin access.
+Activity edits apply to all linked campaigns. Activity points cannot be changed once
+claims exist, so editing does not retroactively change earned points.
+
+Deletion requires confirmation naming the record and cannot be undone. Before enabling
+deletion and again on confirmation, the app checks Dataverse for linked records.
+Campaign deletion is blocked by activity links, audience departments, participants,
+claims, or events; activity deletion is blocked by campaign links or claims.
+Remove those links or records first using the appropriate Dataverse administration tools.
+No related records are automatically deleted. If a dependency check fails, deletion stays
+blocked. Dataverse security roles still govern all writes.
+
+## Event details and management
+
+Select an event in the Events calendar, Upcoming Events, or a KPI event list to
+open its full details, including date and time, format, location, campaign,
+description, image, and meeting link. Calendar overflow opens that day's full list.
+All users can view details; program managers and app admins can edit every event
+field or delete the event after confirming its name. Deleting an event does not
+delete its campaign. Date/time editing uses the user's local time.
+
+## Request submission
+
+The **New Request** button is available at the top right of Requests for program
+managers, app admins, and end users. Signed-in users without a Champion profile can
+choose their department in the request form to create a standard, active Champion
+profile for themselves before submitting. Existing profiles are reused; this setup
+does not grant administrative permissions. Departments and request categories must
+be configured in Settings, and Dataverse security roles must permit the relevant
+profile and request creation operations.
 
 ## Data model
 
@@ -367,8 +411,8 @@ admin”** button:
 
 ### Versioning & upgrades (don't reset existing data)
 
-The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.2`) and is the
-same number carried by the deployable solution (`v1.0.2` in the app → solution version `1.0.2.0`).
+The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.3`) and is the
+same number carried by the deployable solution (`v1.0.3` in the app → solution version `1.0.3.0`).
 
 **To ship an update to a tenant that already has the app — without wiping its data — re-import as an
 upgrade with a *higher* version number.** Dataverse only preserves existing rows when the incoming
@@ -386,16 +430,16 @@ Because the version travels *inside* the exported `.zip`, every shipped change m
 
 | Where | File / command | Format |
 | --- | --- | --- |
-| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.2` |
-| npm package | `package.json` → `version` | `1.0.2` |
-| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.2.0` | `1.0.2.0` |
+| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.3` |
+| npm package | `package.json` → `version` | `1.0.3` |
+| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.3.0` | `1.0.3.0` |
 
 **Release checklist for any future change:**
 
-1. Bump `APP_VERSION` in `src/version.ts` and `version` in `package.json` (e.g. `1.0.1` → `1.0.2`).
+1. Bump `APP_VERSION` in `src/version.ts` and the package/lockfile versions (e.g. `1.0.2` → `1.0.3`).
 2. `npm run build`.
-3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.2.0`.
-4. Re-push + re-bundle the app: `npx power-apps push --solution-id <solution-id>`.
+3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.3.0`.
+4. Re-push + re-bundle the app: `pac code push --solutionName AIChampionsHubApp`.
 5. Re-export both zips: `pac solution export --name AIChampionsHubApp --path .\deploy\solutions\AIChampionsHubApp_managed.zip --managed true --overwrite` (and again `--managed false` for the unmanaged zip).
 6. Commit the bumped sources **and** the refreshed zips together.
 

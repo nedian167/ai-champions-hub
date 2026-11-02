@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
-import { RequestsSvc, bind } from '../data/entities';
+import { ChampionsSvc, RequestsSvc, bind } from '../data/entities';
 import { Card, KpiCard, Pill, EmptyState, SearchInput, Field } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import {
-  RequestCategoryLabel, RequestStatus, RequestStatusLabel, optionsOf,
+  ChampionRole, ChampionStatus, RequestCategoryLabel, RequestStatus, RequestStatusLabel, optionsOf,
 } from '../lib/enums';
 import { formatDate } from '../lib/format';
 import { parseThread, serializeThread, lastMessage, type ThreadMessage } from '../lib/requestThread';
 import type { PillColor } from '../components/ui';
-import type { Abs_requests } from '../data/entities';
+import type { Abs_champions, Abs_requests } from '../data/entities';
 
 function statusColor(s?: number): PillColor {
   switch (s) {
@@ -25,7 +25,7 @@ function statusColor(s?: number): PillColor {
 }
 
 export default function RequestsScreen() {
-  const { requests, requestCategories, requestCategoryById, championById, currentChampion, currentUser, isAdmin, reload } = useAppData();
+  const { requests, requestCategories, requestCategoryById, departments, championById, currentChampion, currentUser, isAdmin, reload } = useAppData();
   const toast = useToast();
   const location = useLocation();
   const navigate = useNavigate();
@@ -38,8 +38,10 @@ export default function RequestsScreen() {
   const [convoStatus, setConvoStatus] = useState<number>(RequestStatus.Open);
   const [msgText, setMsgText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [createdChampion, setCreatedChampion] = useState<Abs_champions | null>(null);
 
-  const [form, setForm] = useState({ title: '', categoryId: '', description: '' });
+  const [form, setForm] = useState({ title: '', categoryId: '', description: '', departmentId: '' });
+  const requesterChampion = currentChampion ?? createdChampion;
 
   // Category display: prefer the configurable lookup, fall back to the legacy option set
   // for older rows created before request categories were made admin-configurable.
@@ -54,20 +56,20 @@ export default function RequestsScreen() {
 
   const myUpn = (currentUser?.userPrincipalName ?? '').toLowerCase();
   const isOwner = (r: Abs_requests) => {
-    if (currentChampion && r._crd49_champion_value === currentChampion.abs_championid) return true;
+    if (requesterChampion && r._crd49_champion_value === requesterChampion.abs_championid) return true;
     const champ = championById.get(r._crd49_champion_value ?? '');
     return !!myUpn && (champ?.abs_userid ?? '').toLowerCase() === myUpn;
   };
 
   const myName = currentUser?.fullName
-    || currentChampion?.crd49_displayname
+    || requesterChampion?.crd49_displayname
     || (isAdmin ? 'Administrator' : 'Requester');
 
   // Admins triage every request; a champion only sees and manages their own.
   const visibleRequests = useMemo(
     () => (isAdmin ? requests : requests.filter(isOwner)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [requests, isAdmin, currentChampion, myUpn, championById],
+    [requests, isAdmin, requesterChampion, myUpn, championById],
   );
 
   const filtered = useMemo(() => {
@@ -89,33 +91,88 @@ export default function RequestsScreen() {
   const completed = visibleRequests.filter((r) => r.crd49_status === RequestStatus.Approved || r.crd49_status === RequestStatus.Fulfilled).length;
 
   async function createRequest() {
-    if (!currentChampion) { toast.error('No champion record found for you.'); return; }
+    if (saving) return;
     if (!form.title.trim() || !form.description.trim()) { toast.error('Title and description are required.'); return; }
-    if (!form.categoryId) { toast.error('Please choose a category.'); return; }
+    if (!requestCategories.some((category) => category.abs_requestcategoryid === form.categoryId)) {
+      toast.error('Please choose a configured category.');
+      return;
+    }
+    if (!requesterChampion) {
+      if (!currentUser?.userPrincipalName.trim()) {
+        toast.error('Sign in through Power Apps to set up your requester profile.');
+        return;
+      }
+      if (!departments.some((department) => department.abs_departmentid === form.departmentId)) {
+        toast.error('Please choose your department to set up your requester profile.');
+        return;
+      }
+    }
     setSaving(true);
+    let profileCreated = false;
+    let requestCreated = false;
     try {
+      let requesterId = requesterChampion?.abs_championid;
+      if (!requesterId) {
+        const upn = currentUser!.userPrincipalName.trim();
+        const existing = await ChampionsSvc.getAll({
+          filter: `abs_userid eq '${upn.replace(/'/g, "''")}'`,
+          top: 2,
+        });
+        if (!existing.success || !existing.data) {
+          throw new Error(existing.error?.message ?? 'Could not check your requester profile.');
+        }
+        if (existing.data.length > 1) {
+          throw new Error('Multiple Champion profiles match your account. Ask a program admin to resolve them before submitting.');
+        }
+        let champion = existing.data[0];
+        if (champion?.crd49_status === ChampionStatus.Inactive && !isAdmin) {
+          throw new Error('Your Champion profile is disabled. Contact a program admin before submitting a request.');
+        }
+        if (!champion) {
+          const profile = await ChampionsSvc.create({
+            abs_userid: upn,
+            crd49_displayname: currentUser!.fullName.trim() || upn,
+            'crd49_Department@odata.bind': bind('department', form.departmentId),
+            crd49_role: ChampionRole.Champion,
+            crd49_status: ChampionStatus.Active,
+            crd49_totalpoints: 0,
+            crd49_joineddate: new Date().toISOString(),
+          } as never);
+          if (!profile.success || !profile.data?.abs_championid) {
+            throw new Error(profile.error?.message ?? 'Could not create your requester profile.');
+          }
+          champion = profile.data;
+          profileCreated = true;
+        }
+        setCreatedChampion(champion);
+        requesterId = champion.abs_championid;
+      }
       const res = await RequestsSvc.create({
         abs_title: form.title.trim(),
         'abs_Category@odata.bind': bind('requestcategory', form.categoryId),
-        'crd49_Champion@odata.bind': bind('champion', currentChampion.abs_championid),
+        'crd49_Champion@odata.bind': bind('champion', requesterId),
         crd49_description: form.description.trim(),
         crd49_status: RequestStatus.Open,
         crd49_submitteddate: new Date().toISOString(),
       } as never);
       if (!res.success) throw new Error(res.error?.message ?? 'Create failed');
+      requestCreated = true;
       toast.success('Request submitted.');
       setShowNew(false);
-      setForm({ title: '', categoryId: '', description: '' });
+      setForm({ title: '', categoryId: '', description: '', departmentId: '' });
       await reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to submit request.');
+      const message = e instanceof Error ? e.message : 'Failed to submit request.';
+      toast.error(requestCreated ? `Request submitted, but refresh failed: ${message}`
+        : profileCreated ? `Your profile was created, but the request was not submitted: ${message} Try again; your profile will be reused.`
+          : message);
     } finally {
       setSaving(false);
     }
   }
 
   function openNew() {
-    setForm({ title: '', categoryId: requestCategories[0]?.abs_requestcategoryid ?? '', description: '' });
+    setForm({ title: '', categoryId: requestCategories[0]?.abs_requestcategoryid ?? '', description: '', departmentId: '' });
     setShowNew(true);
   }
 
@@ -184,7 +241,7 @@ export default function RequestsScreen() {
           <h1>Requests</h1>
           <div className="page-subtitle">{isAdmin ? 'Triage requests from champions and reply back.' : 'Ask for licenses, connectors and AI support — reply here when the team responds.'}</div>
         </div>
-        {currentChampion && <button className="btn btn-primary" onClick={openNew}>➕ New Request</button>}
+        <button className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={openNew}>➕ New Request</button>
       </div>
 
       <div className="grid grid-kpi">
@@ -252,22 +309,40 @@ export default function RequestsScreen() {
       {showNew && (
         <Modal
           title="New Request"
-          onClose={() => setShowNew(false)}
+          onClose={() => { if (!saving) setShowNew(false); }}
           footer={
             <>
-              <button className="btn btn-secondary" onClick={() => setShowNew(false)}>Cancel</button>
-              <button className="btn btn-primary" disabled={saving} onClick={createRequest}>{saving ? 'Submitting…' : 'Submit Request'}</button>
+              <button className="btn btn-secondary" disabled={saving} onClick={() => setShowNew(false)}>Cancel</button>
+              <button className="btn btn-primary" disabled={saving || requestCategories.length === 0 || (!requesterChampion && (!currentUser?.userPrincipalName.trim() || departments.length === 0))} onClick={createRequest}>{saving ? 'Submitting…' : 'Submit Request'}</button>
             </>
           }
         >
-          <Field label="Title"><input className="input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>
+          {!requesterChampion && (
+            <>
+              <div className="help-text" style={{ marginBottom: 12 }}>
+                Your first request needs a Champion profile. Choose your department to create one
+                for {currentUser?.fullName || currentUser?.userPrincipalName || 'your signed-in account'}.
+                This does not grant program manager or app admin permissions.
+              </div>
+              {!currentUser?.userPrincipalName.trim() && <div className="notice notice-warning" role="alert">Sign in through Power Apps to set up your requester profile.</div>}
+              <Field label="Your department">
+                <select className="select" value={form.departmentId} disabled={saving} onChange={(e) => setForm({ ...form, departmentId: e.target.value })}>
+                  <option value="">Select your department...</option>
+                  {departments.map((department) => <option key={department.abs_departmentid} value={department.abs_departmentid}>{department.abs_name}</option>)}
+                </select>
+              </Field>
+              {departments.length === 0 && <div className="notice notice-warning" role="alert">No departments are configured. Ask a program admin to add a department in Settings.</div>}
+            </>
+          )}
+          <Field label="Title"><input className="input" maxLength={850} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>
           <Field label="Category">
             <select className="select" value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
               {requestCategories.length === 0 && <option value="">No categories configured</option>}
               {requestCategories.map((c) => <option key={c.abs_requestcategoryid} value={c.abs_requestcategoryid}>{c.abs_name}</option>)}
             </select>
           </Field>
-          <Field label="Description"><textarea className="textarea" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Describe what you need…" /></Field>
+          {requestCategories.length === 0 && <div className="notice notice-warning" role="alert">No request categories are configured. Ask a program admin to add one in Settings.</div>}
+          <Field label="Description"><textarea className="textarea" maxLength={2000} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Describe what you need…" /></Field>
         </Modal>
       )}
 

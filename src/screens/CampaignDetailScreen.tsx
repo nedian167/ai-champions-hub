@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
-import { CampaignsSvc, CampaignActivitiesSvc, CampaignParticipationsSvc, ActivitiesSvc, bind } from '../data/entities';
+import { CampaignsSvc, CampaignActivitiesSvc, CampaignParticipationsSvc, ActivitiesSvc, bind, type Abs_activities } from '../data/entities';
 import { Card, KpiCard, Pill, HealthBadge, EmptyState, Tabs, Avatar, Field } from '../components/ui';
 import { Modal } from '../components/Modal';
+import { DeleteRecordModal } from '../components/DeleteRecordModal';
 import { useToast } from '../components/Toast';
 import { CampaignStatus, CampaignStatusLabel, ActivityType, ActivityTypeLabel, ValidationMode, ValidationModeLabel, optionsOf } from '../lib/enums';
 import { formatDate, toDateInput } from '../lib/format';
@@ -17,6 +18,7 @@ type Tab = 'activities' | 'participants' | 'events';
 export default function CampaignDetailScreen() {
   const { id } = useParams();
   const nav = useNavigate();
+  const location = useLocation();
   const {
     campaignById, championById, departmentById, activityById, champions, claims,
     campaignDepartments, campaignActivities, participations, events, currentChampion, isAdmin, reload,
@@ -25,7 +27,9 @@ export default function CampaignDetailScreen() {
 
   const campaign = id ? campaignById.get(id) : undefined;
   const [tab, setTab] = useState<Tab>('activities');
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(() => (location.state as { edit?: boolean } | null)?.edit === true);
+  const [removing, setRemoving] = useState(false);
+  const [removingActivity, setRemovingActivity] = useState<Abs_activities | null>(null);
   const [showNewAct, setShowNewAct] = useState(false);
   const [saving, setSaving] = useState(false);
   const [actForm, setActForm] = useState({
@@ -84,17 +88,31 @@ export default function CampaignDetailScreen() {
   }
 
   async function save() {
+    if (!canEdit || saving) return;
+    if (!form.name.trim() || !form.startdate || !form.enddate) {
+      toast.error('Name, start and end date are required.');
+      return;
+    }
+    if (form.enddate < form.startdate) {
+      toast.error('End date must be on or after the start date.');
+      return;
+    }
+    const status = Object.values(CampaignStatus).find((value) => value === form.status);
+    if (status === undefined) {
+      toast.error('Select a valid campaign status.');
+      return;
+    }
     setSaving(true);
     try {
       const res = await CampaignsSvc.update(campaign!.abs_campaignid, {
         abs_name: form.name.trim(),
-        crd49_theme: form.theme.trim() || undefined,
-        crd49_description: form.description.trim() || undefined,
-        crd49_startdate: form.startdate ? new Date(form.startdate).toISOString() : undefined,
-        crd49_enddate: form.enddate ? new Date(form.enddate).toISOString() : undefined,
-        crd49_status: form.status,
-        crd49_imageurl: form.imageurl.trim() ? form.imageurl.trim() : null,
-      } as never);
+        crd49_theme: form.theme.trim(),
+        crd49_description: form.description.trim(),
+        crd49_startdate: new Date(form.startdate).toISOString(),
+        crd49_enddate: new Date(form.enddate).toISOString(),
+        crd49_status: status,
+        crd49_imageurl: form.imageurl.trim(),
+      });
       if (!res.success) throw new Error(res.error?.message ?? 'Update failed');
       toast.success('Campaign updated.');
       setEditing(false);
@@ -108,6 +126,18 @@ export default function CampaignDetailScreen() {
 
   const owner = championById.get(campaign._crd49_campaignowner_value ?? '');
   const canEdit = isAdmin || (!!currentChampion && campaign._crd49_campaignowner_value === currentChampion.abs_championid);
+  function openEdit() {
+    setForm({
+      name: campaign!.abs_name,
+      theme: campaign!.crd49_theme ?? '',
+      description: campaign!.crd49_description ?? '',
+      startdate: toDateInput(campaign!.crd49_startdate),
+      enddate: toDateInput(campaign!.crd49_enddate),
+      status: campaign!.crd49_status,
+      imageurl: campaign!.crd49_imageurl ?? '',
+    });
+    setEditing(true);
+  }
   const eff = effectiveCampaignStatus(campaign);
   const expired = isCampaignExpired(campaign);
   const live = isCampaignLive(campaign);
@@ -215,7 +245,8 @@ export default function CampaignDetailScreen() {
             )
           )}
           {isAdmin && <button className="btn btn-secondary" onClick={() => setShowNewAct(true)}>🎯 New Activity</button>}
-          {canEdit && <button className="btn btn-secondary" onClick={() => setEditing(true)}>✏️ Edit</button>}
+          {canEdit && <button className="btn btn-secondary" onClick={openEdit}>✏️ Edit</button>}
+          {isAdmin && <button className="btn btn-danger" onClick={() => setRemoving(true)}>Delete</button>}
         </div>
       </div>
 
@@ -231,7 +262,7 @@ export default function CampaignDetailScreen() {
           </div>
           {canEdit && (
             <div className="row">
-              <button className="btn btn-secondary btn-sm" onClick={() => setEditing(true)}>Change end date</button>
+              <button className="btn btn-secondary btn-sm" onClick={openEdit}>Change end date</button>
               <button className="btn btn-primary btn-sm" disabled={saving} onClick={reactivate}>
                 {saving ? 'Reactivating…' : 'Reactivate +30 days'}
               </button>
@@ -303,6 +334,12 @@ export default function CampaignDetailScreen() {
                   </div>
                   {!live && <Pill color="gray">Inactive</Pill>}
                   <span className="points-badge">{a.crd49_points} pts</span>
+                  {isAdmin && (
+                    <div className="row" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => nav('/activities', { state: { editActivityId: a.abs_activityid } })}>Edit</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => setRemovingActivity(a)}>Delete</button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -342,14 +379,21 @@ export default function CampaignDetailScreen() {
         )}
       </Card>
 
-      {editing && (
+      {removing && isAdmin && (
+        <DeleteRecordModal kind="campaign" id={campaign.abs_campaignid} name={campaign.abs_name} onClose={() => setRemoving(false)} onDeleted={() => nav('/campaigns')} />
+      )}
+      {removingActivity && isAdmin && (
+        <DeleteRecordModal kind="activity" id={removingActivity.abs_activityid} name={removingActivity.abs_title} onClose={() => setRemovingActivity(null)} />
+      )}
+
+      {editing && canEdit && (
         <Modal
           title="Edit Campaign"
           wide
-          onClose={() => setEditing(false)}
+          onClose={() => { if (!saving) setEditing(false); }}
           footer={
             <>
-              <button className="btn btn-secondary" onClick={() => setEditing(false)}>Cancel</button>
+              <button className="btn btn-secondary" disabled={saving} onClick={() => setEditing(false)}>Cancel</button>
               <button className="btn btn-primary" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save Changes'}</button>
             </>
           }

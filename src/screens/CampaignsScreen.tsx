@@ -4,6 +4,7 @@ import { useAppData } from '../context/AppDataContext';
 import { CampaignsSvc, CampaignDepartmentsSvc, bind, type Abs_campaigns } from '../data/entities';
 import { Card, KpiCard, Pill, HealthBadge, EmptyState, Tabs, Field } from '../components/ui';
 import { Modal } from '../components/Modal';
+import { DeleteRecordModal } from '../components/DeleteRecordModal';
 import { useToast } from '../components/Toast';
 import { CampaignStatus, CampaignStatusLabel, optionsOf } from '../lib/enums';
 import { formatDate, toDateInput } from '../lib/format';
@@ -41,6 +42,7 @@ export default function CampaignsScreen() {
   const [tab, setTab] = useState<Tab>('active');
   const [show, setShow] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState<Abs_campaigns | null>(null);
   const [form, setForm] = useState({
     name: '', theme: '', description: '', startdate: toDateInput(new Date().toISOString()),
     enddate: '', status: CampaignStatus.Draft as number, owner: '', imageurl: '', departments: [] as string[],
@@ -115,8 +117,13 @@ export default function CampaignsScreen() {
   }
 
   async function createCampaign() {
+    if (!isAdmin || saving) return;
     if (!form.name.trim() || !form.startdate || !form.enddate) {
       toast.error('Name, start and end date are required.');
+      return;
+    }
+    if (form.enddate < form.startdate) {
+      toast.error('End date must be on or after the start date.');
       return;
     }
     setSaving(true);
@@ -226,11 +233,21 @@ export default function CampaignsScreen() {
                       {expired ? `⏰ Ended ${formatDate(c.crd49_enddate)}` : `📅 ${formatDate(c.crd49_startdate)}`}
                     </span>
                   </div>
+                  {isAdmin && (
+                    <div className="row mt-16" onClick={(e) => e.stopPropagation()}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => nav(`/campaigns/${c.abs_campaignid}`, { state: { edit: true } })}>Edit</button>
+                      <button className="btn btn-danger btn-sm" onClick={() => setRemoving(c)}>Delete</button>
+                    </div>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
+      )}
+
+      {removing && isAdmin && (
+        <DeleteRecordModal kind="campaign" id={removing.abs_campaignid} name={removing.abs_name} onClose={() => setRemoving(null)} />
       )}
 
       {banner && (

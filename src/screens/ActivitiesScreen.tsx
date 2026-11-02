@@ -6,6 +6,7 @@ import {
 } from '../data/entities';
 import { Card, KpiCard, Pill, EmptyState, Tabs, Avatar, Field } from '../components/ui';
 import { Modal } from '../components/Modal';
+import { DeleteRecordModal } from '../components/DeleteRecordModal';
 import { useToast } from '../components/Toast';
 import {
   ActivityType, ActivityTypeLabel, ValidationMode, ValidationModeLabel,
@@ -34,6 +35,9 @@ export default function ActivitiesScreen() {
   const toast = useToast();
   const location = useLocation();
   const navigate = useNavigate();
+  const initialActivity = isAdmin
+    ? activityById.get((location.state as { editActivityId?: string } | null)?.editActivityId ?? '')
+    : undefined;
 
   const [tab, setTab] = useState<Tab>(
     () => ((location.state as { tab?: Tab } | null)?.tab === 'claims' ? 'claims' : 'activities'),
@@ -46,16 +50,23 @@ export default function ActivitiesScreen() {
       return typeof s === 'number' ? s : 'all';
     },
   );
-  const [showNew, setShowNew] = useState(false);
+  const [showNew, setShowNew] = useState(!!initialActivity);
+  const [editing, setEditing] = useState<Abs_activities | null>(initialActivity ?? null);
+  const [removing, setRemoving] = useState<Abs_activities | null>(null);
   const [claimFor, setClaimFor] = useState<Abs_activities | null>(null);
   const [detail, setDetail] = useState<Abs_activityclaims | null>(null);
   const [saving, setSaving] = useState(false);
   const autoOpenedRef = useRef<string | null>(null);
 
-  const [newForm, setNewForm] = useState({
-    title: '', description: '', type: ActivityType.OnlineCourse as number, points: 10,
-    validation: ValidationMode.SelfClaimed as number, lmslink: '', campaign: '',
-  });
+  const [newForm, setNewForm] = useState(() => ({
+    title: initialActivity?.abs_title ?? '',
+    description: initialActivity?.crd49_description ?? '',
+    type: initialActivity?.crd49_activitytype ?? ActivityType.OnlineCourse as number,
+    points: initialActivity?.crd49_points ?? 10,
+    validation: initialActivity?.crd49_validationmode ?? ValidationMode.SelfClaimed as number,
+    lmslink: initialActivity?.crd49_lmslink ?? '',
+    campaign: '',
+  }));
   const [claimForm, setClaimForm] = useState({ campaign: '', notes: '', evidenceurl: '' });
 
   const myPoints = pointsFor(currentChampion?.abs_championid);
@@ -129,6 +140,7 @@ export default function ActivitiesScreen() {
   }, [location.state, claims]);
 
   useEffect(() => {
+    if (!isAdmin) return;
     const st = location.state as { openNew?: boolean; campaignId?: string } | null;
     if (st?.openNew && autoOpenedRef.current !== 'new') {
       autoOpenedRef.current = 'new';
@@ -136,7 +148,7 @@ export default function ActivitiesScreen() {
       navigate(location.pathname, { replace: true, state: { tab: 'activities' } });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state]);
+  }, [location.state, isAdmin]);
 
   function closeDetail() {
     setDetail(null);
@@ -146,19 +158,45 @@ export default function ActivitiesScreen() {
     }
   }
 
-  async function createActivity() {
+  async function saveActivity() {
+    if (!isAdmin || saving) return;
     if (!newForm.title.trim()) { toast.error('Title is required.'); return; }
-    if (!newForm.campaign) { toast.error('Select the campaign this activity belongs to.'); return; }
+    if (!editing && !newForm.campaign) { toast.error('Select the campaign this activity belongs to.'); return; }
+    if (!Number.isSafeInteger(newForm.points) || newForm.points < 0) {
+      toast.error('Points must be a non-negative whole number.');
+      return;
+    }
+    const type = Object.values(ActivityType).find((value) => value === newForm.type);
+    const validation = Object.values(ValidationMode).find((value) => value === newForm.validation);
+    if (type === undefined || validation === undefined) {
+      toast.error('Select a valid activity type and validation mode.');
+      return;
+    }
     setSaving(true);
     try {
-      const res = await ActivitiesSvc.create({
+      const payload = {
         abs_title: newForm.title.trim(),
-        crd49_description: newForm.description.trim() || undefined,
-        crd49_activitytype: newForm.type,
-        crd49_points: Number(newForm.points) || 0,
-        crd49_validationmode: newForm.validation,
-        crd49_lmslink: newForm.lmslink.trim() || undefined,
-      } as never);
+        crd49_description: newForm.description.trim(),
+        crd49_activitytype: type,
+        crd49_points: newForm.points,
+        crd49_validationmode: validation,
+        crd49_lmslink: newForm.lmslink.trim(),
+      };
+      if (editing) {
+        if (newForm.points !== editing.crd49_points) {
+          const linked = await ActivityClaimsSvc.getAll({ filter: `_crd49_activity_value eq ${editing.abs_activityid}`, top: 1 });
+          if (!linked.success || !linked.data) throw new Error(linked.error?.message ?? 'Could not check existing claims.');
+          if (linked.data.length) throw new Error('Points cannot be changed after an activity has claims. This preserves earned points.');
+        }
+        const res = await ActivitiesSvc.update(editing.abs_activityid, payload);
+        if (!res.success) throw new Error(res.error?.message ?? 'Update failed');
+        toast.success('Activity updated.');
+        setShowNew(false);
+        setEditing(null);
+        await reload();
+        return;
+      }
+      const res = await ActivitiesSvc.create(payload as never);
       if (!res.success || !res.data) throw new Error(res.error?.message ?? 'Create failed');
 
       // Link the new activity to its campaign (activities are always created under a campaign).
@@ -174,14 +212,29 @@ export default function ActivitiesScreen() {
       setNewForm({ title: '', description: '', type: ActivityType.OnlineCourse, points: 10, validation: ValidationMode.SelfClaimed, lmslink: '', campaign: '' });
       await reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to create activity.');
+      toast.error(e instanceof Error ? e.message : `Failed to ${editing ? 'update' : 'create'} activity.`);
     } finally {
       setSaving(false);
     }
   }
 
   function openNewActivity(campaignId?: string) {
+    setEditing(null);
     setNewForm({ title: '', description: '', type: ActivityType.OnlineCourse, points: 10, validation: ValidationMode.SelfClaimed, lmslink: '', campaign: campaignId ?? '' });
+    setShowNew(true);
+  }
+
+  function openEditActivity(activity: Abs_activities) {
+    setEditing(activity);
+    setNewForm({
+      title: activity.abs_title,
+      description: activity.crd49_description ?? '',
+      type: activity.crd49_activitytype,
+      points: activity.crd49_points,
+      validation: activity.crd49_validationmode,
+      lmslink: activity.crd49_lmslink ?? '',
+      campaign: '',
+    });
     setShowNew(true);
   }
 
@@ -362,6 +415,12 @@ export default function ActivitiesScreen() {
                     </div>
                     {a.crd49_lmslink && <a href={a.crd49_lmslink} target="_blank" rel="noreferrer" className="tag-link link">🔗 Open Learning Content</a>}
                     <div className="divider" />
+                    {isAdmin && (
+                      <div className="row" style={{ marginBottom: 12 }}>
+                        <button className="btn btn-secondary btn-sm" onClick={() => openEditActivity(a)}>Edit</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => setRemoving(a)}>Delete</button>
+                      </div>
+                    )}
                     {claimable.length > 0 ? (
                       <button className="btn btn-primary btn-sm btn-block" onClick={() => { setClaimFor(a); setClaimForm({ campaign: claimable.length === 1 ? claimable[0].abs_campaignid : '', notes: '', evidenceurl: settings?.crd49_sharepointurl ?? '' }); }}>
                         Claim Activity
@@ -428,24 +487,32 @@ export default function ActivitiesScreen() {
         </Card>
       )}
 
-      {showNew && (
+      {removing && isAdmin && (
+        <DeleteRecordModal kind="activity" id={removing.abs_activityid} name={removing.abs_title} onClose={() => setRemoving(null)} />
+      )}
+
+      {showNew && isAdmin && (
         <Modal
-          title="New Activity"
+          title={editing ? 'Edit Activity' : 'New Activity'}
           wide
-          onClose={() => setShowNew(false)}
+          onClose={() => { if (!saving) setShowNew(false); }}
           footer={
             <>
-              <button className="btn btn-secondary" onClick={() => setShowNew(false)}>Cancel</button>
-              <button className="btn btn-primary" disabled={saving} onClick={createActivity}>{saving ? 'Saving…' : 'Create Activity'}</button>
+              <button className="btn btn-secondary" disabled={saving} onClick={() => setShowNew(false)}>Cancel</button>
+              <button className="btn btn-primary" disabled={saving} onClick={saveActivity}>{saving ? 'Saving…' : editing ? 'Save Changes' : 'Create Activity'}</button>
             </>
           }
         >
-          <Field label="Campaign" help="Activities are always created under a campaign. Champions must join the campaign to access this activity.">
+          {editing ? (
+            <Field label="Campaigns" help="Editing this shared activity updates it in every linked campaign. Campaign links are unchanged.">
+              <div>{campaignIdsForActivity(editing.abs_activityid, campaignActivities).map((cid) => campaignById.get(cid)?.abs_name ?? cid).join(', ') || 'Not linked to a campaign'}</div>
+            </Field>
+          ) : <Field label="Campaign" help="Activities are always created under a campaign. Champions must join the campaign to access this activity.">
             <select className="select" value={newForm.campaign} onChange={(e) => setNewForm({ ...newForm, campaign: e.target.value })}>
               <option value="">Select a campaign…</option>
               {campaigns.map((c) => <option key={c.abs_campaignid} value={c.abs_campaignid}>{c.abs_name}{isCampaignLive(c) ? '' : ' (inactive)'}</option>)}
             </select>
-          </Field>
+          </Field>}
           <Field label="Title"><input className="input" value={newForm.title} onChange={(e) => setNewForm({ ...newForm, title: e.target.value })} /></Field>
           <Field label="Description"><textarea className="textarea" value={newForm.description} onChange={(e) => setNewForm({ ...newForm, description: e.target.value })} /></Field>
           <div className="field-row">
@@ -454,7 +521,9 @@ export default function ActivitiesScreen() {
                 {optionsOf(ActivityTypeLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </Field>
-            <Field label="Points"><input type="number" className="input" value={newForm.points} onChange={(e) => setNewForm({ ...newForm, points: Number(e.target.value) })} /></Field>
+            <Field label="Points" help={editing && claims.some((c) => c._crd49_activity_value === editing.abs_activityid) ? 'Points are locked because claims exist, preserving earned points.' : undefined}>
+              <input type="number" min={0} step={1} className="input" value={Number.isNaN(newForm.points) ? '' : newForm.points} disabled={!!editing && claims.some((c) => c._crd49_activity_value === editing.abs_activityid)} onChange={(e) => setNewForm({ ...newForm, points: e.target.valueAsNumber })} />
+            </Field>
           </div>
           <div className="field-row">
             <Field label="Validation mode">

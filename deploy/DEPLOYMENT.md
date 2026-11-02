@@ -23,7 +23,7 @@ for pushing code updates (see Part 2, Option B).
 |-------------|-------|
 | Target environment | A Power Platform environment **with Dataverse** (Production or Sandbox). |
 | Rights | System Administrator (to import the solution) + Maker (to push the Code App). |
-| Power Platform CLI | `pac` **2.9+** — <https://aka.ms/PowerPlatformCLI> |
+| Power Platform CLI | `pac` **2.14+** — <https://aka.ms/PowerPlatformCLI> |
 | Node.js / npm | Node **24+**, npm **11+** |
 | Connection | An **Office 365 Users** connection in the target env (for the people picker). |
 
@@ -165,13 +165,14 @@ Then add champions (**Champions → Add Champion**) and create your first campai
 
 ## Maintainer note — how the app is bundled in the solution
 
-The Code App is added to the `AIChampionsHubApp` solution using the npm CLI's solution targeting
+The Code App is added to the `AIChampionsHubApp` solution using the Power Platform CLI's solution-targeted push
 (preview), so it exports/imports with the rest of the solution:
 
 ```powershell
 # From the repo root, authenticated to the SOURCE env:
 npm run build
-npx power-apps push --solution-id <AIChampionsHubApp solution GUID>
+pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.3.0
+pac code push --solutionName AIChampionsHubApp
 
 # Then re-export both packages:
 pac solution export --name AIChampionsHubApp --path .\deploy\solutions\AIChampionsHubApp_managed.zip   --managed true  --overwrite

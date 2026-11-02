@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useAppData } from '../context/AppDataContext';
-import { EventsSvc, bind } from '../data/entities';
+import { EventsSvc, bind, type Abs_events } from '../data/entities';
 import { Card, KpiCard, Pill, EmptyState, Field } from '../components/ui';
 import { Modal } from '../components/Modal';
+import { DeleteRecordModal } from '../components/DeleteRecordModal';
 import { useToast } from '../components/Toast';
 import { EventFormat, EventFormatLabel, optionsOf } from '../lib/enums';
-import { formatDate, toDateTimeInput } from '../lib/format';
+import { formatDate, formatDateTime, toDateTimeInput } from '../lib/format';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -16,6 +17,10 @@ export default function EventsScreen() {
   const [cursor, setCursor] = useState(() => new Date());
   const [show, setShow] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<Abs_events | null>(null);
+  const selectedEvent = events.find((event) => event.abs_eventid === selectedId);
   const [form, setForm] = useState({
     name: '', campaign: '', description: '', eventdate: '', format: EventFormat.Online as number,
     location: '', meetinglink: '', imageurl: '',
@@ -29,7 +34,8 @@ export default function EventsScreen() {
   const upcomingInPerson = events.filter((e) => isUpcoming(e) && e.crd49_format === EventFormat.InPerson).length;
   const pastCount = events.filter((e) => !isUpcoming(e)).length;
 
-  const [detail, setDetail] = useState<null | 'all' | 'online' | 'inperson' | 'past'>(null);
+  const [detail, setDetail] = useState<null | 'all' | 'online' | 'inperson' | 'past' | 'day'>(null);
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const detailEvents = useMemo(() => {
     const cutoff = Date.now() - 864e5;
     const up = (e: typeof events[number]) => new Date(e.crd49_eventdate).getTime() >= cutoff;
@@ -39,12 +45,15 @@ export default function EventsScreen() {
         ? events.filter((e) => up(e) && e.crd49_format === EventFormat.InPerson)
         : detail === 'past'
           ? events.filter((e) => !up(e))
-          : events;
+          : detail === 'day' && selectedDay
+            ? events.filter((e) => new Date(e.crd49_eventdate).toDateString() === selectedDay.toDateString())
+            : events;
     return [...list].sort((a, b) => (a.crd49_eventdate ?? '').localeCompare(b.crd49_eventdate ?? ''));
-  }, [detail, events]);
+  }, [detail, events, selectedDay]);
   const detailTitle = detail === 'online' ? 'Upcoming Online Events'
     : detail === 'inperson' ? 'Upcoming In-Person Events'
     : detail === 'past' ? 'Past Events'
+    : detail === 'day' ? `Events on ${formatDate(selectedDay?.toISOString())}`
     : 'All Events';
 
   const upcoming = useMemo(
@@ -62,11 +71,11 @@ export default function EventsScreen() {
     const cells: (number | null)[] = [];
     for (let i = 0; i < first; i++) cells.push(null);
     for (let d = 1; d <= days; d++) cells.push(d);
-    const byDay = new Map<number, string[]>();
+    const byDay = new Map<number, Abs_events[]>();
     for (const e of events) {
       const dt = new Date(e.crd49_eventdate);
       if (dt.getFullYear() === year && dt.getMonth() === month) {
-        byDay.set(dt.getDate(), [...(byDay.get(dt.getDate()) ?? []), e.abs_name]);
+        byDay.set(dt.getDate(), [...(byDay.get(dt.getDate()) ?? []), e]);
       }
     }
     return { cells, byDay, year, month };
@@ -74,28 +83,77 @@ export default function EventsScreen() {
 
   const today = new Date();
 
-  async function createEvent() {
+  function openNew() {
+    setEditingId(null);
+    setSelectedId(null);
+    setForm({ name: '', campaign: '', description: '', eventdate: '', format: EventFormat.Online, location: '', meetinglink: '', imageurl: '' });
+    setShow(true);
+  }
+
+  function openEdit(event: Abs_events) {
+    if (!isAdmin) return;
+    setEditingId(event.abs_eventid);
+    setForm({
+      name: event.abs_name,
+      campaign: event._crd49_campaign_value ?? '',
+      description: event.crd49_description ?? '',
+      eventdate: toDateTimeInput(event.crd49_eventdate),
+      format: event.crd49_format,
+      location: event.crd49_location ?? '',
+      meetinglink: event.crd49_meetinglink ?? '',
+      imageurl: event.crd49_imageurl ?? '',
+    });
+    setShow(true);
+  }
+
+  async function saveEvent() {
+    if (!isAdmin || saving) return;
     if (!form.name.trim() || !form.eventdate) { toast.error('Name and date are required.'); return; }
+    const eventdate = new Date(form.eventdate);
+    if (!Number.isFinite(eventdate.getTime())) { toast.error('Choose a valid date and time.'); return; }
+    const format = Object.values(EventFormat).find((value) => value === form.format);
+    if (format === undefined) { toast.error('Choose a valid event format.'); return; }
+    for (const [label, value] of [['Meeting link', form.meetinglink], ['Image URL', form.imageurl]]) {
+      if (!value.trim()) continue;
+      try {
+        const url = new URL(value.trim());
+        if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('Invalid protocol');
+      } catch {
+        toast.error(`${label} must be a valid http or https URL.`);
+        return;
+      }
+    }
     setSaving(true);
+    let saved = false;
     try {
-      const payload: Record<string, unknown> = {
+      const payload = {
         abs_name: form.name.trim(),
-        crd49_description: form.description.trim() || undefined,
-        crd49_eventdate: new Date(form.eventdate).toISOString(),
-        crd49_format: form.format,
-        crd49_location: form.location.trim() || undefined,
-        crd49_meetinglink: form.meetinglink.trim() || undefined,
-        crd49_imageurl: form.imageurl.trim() || undefined,
+        crd49_description: form.description.trim(),
+        crd49_eventdate: eventdate.toISOString(),
+        crd49_format: format,
+        crd49_location: form.location.trim(),
+        crd49_meetinglink: form.meetinglink.trim(),
+        crd49_imageurl: form.imageurl.trim(),
       };
-      if (form.campaign) payload['crd49_Campaign@odata.bind'] = bind('campaign', form.campaign);
-      const res = await EventsSvc.create(payload as never);
-      if (!res.success) throw new Error(res.error?.message ?? 'Create failed');
-      toast.success('Event created.');
+      const campaign = form.campaign ? bind('campaign', form.campaign) : null;
+      const changes = { ...payload, 'crd49_Campaign@odata.bind': campaign };
+      // Dataverse accepts null to clear a lookup; generated SDK lookup types omit it.
+      const res = editingId
+        ? await EventsSvc.update(editingId, changes as Parameters<typeof EventsSvc.update>[1])
+        : await EventsSvc.create({
+          ...payload,
+          ...(campaign ? { 'crd49_Campaign@odata.bind': campaign } : {}),
+        } as Parameters<typeof EventsSvc.create>[0]);
+      if (!res.success) throw new Error(res.error?.message ?? (editingId ? 'Update failed' : 'Create failed'));
+      saved = true;
+      toast.success(editingId ? 'Event updated.' : 'Event created.');
       setShow(false);
+      setEditingId(null);
       setForm({ name: '', campaign: '', description: '', eventdate: '', format: EventFormat.Online, location: '', meetinglink: '', imageurl: '' });
       await reload();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to create event.');
+      const message = e instanceof Error ? e.message : `Failed to ${editingId ? 'update' : 'create'} event.`;
+      toast.error(saved ? `Event saved, but refresh failed: ${message}` : message);
     } finally {
       setSaving(false);
     }
@@ -110,7 +168,7 @@ export default function EventsScreen() {
           <h1>Events</h1>
           <div className="page-subtitle">Workshops, live sessions and community meetups.</div>
         </div>
-        {isAdmin && <button className="btn btn-primary" onClick={() => setShow(true)}>➕ New Event</button>}
+        {isAdmin && <button className="btn btn-primary" onClick={openNew}>➕ New Event</button>}
       </div>
 
       <div className="grid grid-kpi">
@@ -140,8 +198,12 @@ export default function EventsScreen() {
               return (
                 <div className={`cal-cell ${isToday ? 'today' : ''}`} key={d}>
                   <div className="cal-daynum">{d}</div>
-                  {evs.slice(0, 2).map((name, j) => <div className="cal-event" key={j} title={name}>{name}</div>)}
-                  {evs.length > 2 && <div className="item-sub">+{evs.length - 2} more</div>}
+                  {evs.slice(0, 2).map((event) => (
+                    <button className="cal-event" key={event.abs_eventid} title={event.abs_name} onClick={() => setSelectedId(event.abs_eventid)}>{event.abs_name}</button>
+                  ))}
+                  {evs.length > 2 && (
+                    <button className="cal-more link" onClick={() => { setSelectedDay(new Date(grid.year, grid.month, d)); setDetail('day'); }}>+{evs.length - 2} more</button>
+                  )}
                 </div>
               );
             })}
@@ -154,7 +216,14 @@ export default function EventsScreen() {
           ) : (
             <div className="list">
               {upcoming.slice(0, 8).map((e) => (
-                <div className="list-item" key={e.abs_eventid}>
+                <div
+                  className="list-item clickable"
+                  key={e.abs_eventid}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedId(e.abs_eventid)}
+                  onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); setSelectedId(e.abs_eventid); } }}
+                >
                   <div className="center-col spacer">
                     <span className="item-title">{e.abs_name}</span>
                     <span className="item-sub">{formatDate(e.crd49_eventdate)} · {e.crd49_location || (e.crd49_format === EventFormat.Online ? 'Online' : 'In-Person')}</span>
@@ -167,21 +236,59 @@ export default function EventsScreen() {
         </Card>
       </div>
 
-      {show && (
+      {selectedEvent && !show && !removing && (
         <Modal
-          title="New Event"
+          title={selectedEvent.abs_name}
           wide
-          onClose={() => setShow(false)}
+          onClose={() => setSelectedId(null)}
           footer={
             <>
-              <button className="btn btn-secondary" onClick={() => setShow(false)}>Cancel</button>
-              <button className="btn btn-primary" disabled={saving} onClick={createEvent}>{saving ? 'Saving…' : 'Create Event'}</button>
+              <button className="btn btn-secondary" onClick={() => setSelectedId(null)}>Close</button>
+              {isAdmin && (
+                <>
+                  <button className="btn btn-secondary" onClick={() => openEdit(selectedEvent)}>Edit Event</button>
+                  <button className="btn btn-danger" onClick={() => setRemoving(selectedEvent)}>Delete Event</button>
+                </>
+              )}
             </>
           }
         >
-          <Field label="Name"><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+          {selectedEvent.crd49_imageurl && <div className="campaign-hero" style={{ backgroundImage: `url("${selectedEvent.crd49_imageurl}")` }} />}
+          <div className="detail-grid">
+            <div><span className="help-text">Date & time</span><div>{formatDateTime(selectedEvent.crd49_eventdate)}</div></div>
+            <div><span className="help-text">Format</span><div>{EventFormatLabel[selectedEvent.crd49_format]}</div></div>
+            <div><span className="help-text">Location</span><div>{selectedEvent.crd49_location || (selectedEvent.crd49_format === EventFormat.Online ? 'Online' : 'Not specified')}</div></div>
+            <div><span className="help-text">Campaign</span><div>{campaigns.find((campaign) => campaign.abs_campaignid === selectedEvent._crd49_campaign_value)?.abs_name ?? selectedEvent.crd49_campaignname ?? 'None'}</div></div>
+          </div>
+          <div className="divider" />
+          <p style={{ whiteSpace: 'pre-wrap' }}>{selectedEvent.crd49_description || 'No description provided.'}</p>
+          {selectedEvent.crd49_meetinglink && (
+            /^https?:\/\//i.test(selectedEvent.crd49_meetinglink)
+              ? <a href={selectedEvent.crd49_meetinglink} target="_blank" rel="noreferrer" className="link">Open meeting link</a>
+              : <p className="text-muted">The meeting link is invalid. Ask a program admin to update it.</p>
+          )}
+        </Modal>
+      )}
+
+      {removing && isAdmin && (
+        <DeleteRecordModal kind="event" id={removing.abs_eventid} name={removing.abs_name} onClose={() => setRemoving(null)} onDeleted={() => setSelectedId(null)} />
+      )}
+
+      {show && isAdmin && (
+        <Modal
+          title={editingId ? 'Edit Event' : 'New Event'}
+          wide
+          onClose={() => { if (!saving) setShow(false); }}
+          footer={
+            <>
+              <button className="btn btn-secondary" disabled={saving} onClick={() => setShow(false)}>Cancel</button>
+              <button className="btn btn-primary" disabled={saving} onClick={saveEvent}>{saving ? 'Saving…' : editingId ? 'Save Changes' : 'Create Event'}</button>
+            </>
+          }
+        >
+          <Field label="Name"><input className="input" maxLength={850} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
           <div className="field-row">
-            <Field label="Date & time"><input type="datetime-local" className="input" value={form.eventdate ? toDateTimeInput(form.eventdate) : ''} onChange={(e) => setForm({ ...form, eventdate: e.target.value })} /></Field>
+            <Field label="Date & time"><input type="datetime-local" className="input" value={form.eventdate} onChange={(e) => setForm({ ...form, eventdate: e.target.value })} /></Field>
             <Field label="Format">
               <select className="select" value={form.format} onChange={(e) => setForm({ ...form, format: Number(e.target.value) })}>
                 {optionsOf(EventFormatLabel).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -191,32 +298,41 @@ export default function EventsScreen() {
           <Field label="Campaign">
             <select className="select" value={form.campaign} onChange={(e) => setForm({ ...form, campaign: e.target.value })}>
               <option value="">None</option>
+              {form.campaign && !campaigns.some((campaign) => campaign.abs_campaignid === form.campaign) && <option value={form.campaign}>Current campaign (unavailable)</option>}
               {campaigns.map((c) => <option key={c.abs_campaignid} value={c.abs_campaignid}>{c.abs_name}</option>)}
             </select>
           </Field>
-          <Field label="Description"><textarea className="textarea" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
+          <Field label="Description"><textarea className="textarea" maxLength={2000} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
           <div className="field-row">
-            <Field label="Location"><input className="input" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Room / address" /></Field>
-            <Field label="Meeting link"><input className="input" value={form.meetinglink} onChange={(e) => setForm({ ...form, meetinglink: e.target.value })} placeholder="https://teams…" /></Field>
+            <Field label="Location"><input className="input" maxLength={100} value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Room / address" /></Field>
+            <Field label="Meeting link"><input className="input" maxLength={2000} value={form.meetinglink} onChange={(e) => setForm({ ...form, meetinglink: e.target.value })} placeholder="https://teams…" /></Field>
           </div>
+          <Field label="Image URL"><input className="input" maxLength={2000} value={form.imageurl} onChange={(e) => setForm({ ...form, imageurl: e.target.value })} placeholder="https://..." /></Field>
         </Modal>
       )}
-      {detail && (
+      {detail && !selectedEvent && !show && !removing && (
         <Modal title={`${detailTitle} (${detailEvents.length})`} wide onClose={() => setDetail(null)}>
           {detailEvents.length === 0 ? (
             <EmptyState icon="📅" title="No events" message="Nothing to show in this category yet." />
           ) : (
             <div className="list">
               {detailEvents.map((e) => (
-                <div className="list-item" key={e.abs_eventid}>
+                <div
+                  className="list-item clickable"
+                  key={e.abs_eventid}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedId(e.abs_eventid)}
+                  onKeyDown={(ev) => { if (ev.target === ev.currentTarget && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); setSelectedId(e.abs_eventid); } }}
+                >
                   <div className="center-col spacer">
                     <span className="item-title">{e.abs_name}</span>
                     <span className="item-sub">
-                      {formatDate(e.crd49_eventdate)}
+                      {formatDateTime(e.crd49_eventdate)}
                       {e.crd49_location ? ` · ${e.crd49_location}` : ''}
                       {e.crd49_meetinglink ? ' · ' : ''}
-                      {e.crd49_meetinglink && (
-                        <a href={e.crd49_meetinglink} target="_blank" rel="noreferrer" className="link">Join link</a>
+                      {e.crd49_meetinglink && /^https?:\/\//i.test(e.crd49_meetinglink) && (
+                        <a href={e.crd49_meetinglink} target="_blank" rel="noreferrer" className="link" onClick={(ev) => ev.stopPropagation()}>Join link</a>
                       )}
                     </span>
                     {e.crd49_description && <span className="item-sub">{e.crd49_description}</span>}
