@@ -210,11 +210,22 @@ outcomes remain explicit; use **Check Outlook status** and review Outlook before
 confirming a retry. Removing the marker or moving/copying an appointment to another
 calendar is outside this per-calendar duplicate check.
 
-**Release v1.0.5:** the managed and unmanaged solution packages include the native
+**Release v1.0.6:** the managed and unmanaged solution packages include the native
 Outlook module and the optional `abs_eventend` column. Existing event records are
-preserved. Each user must authorize their own Outlook connection. Automated and
-illustrative UI checks do not replace a live target-tenant mailbox check; creating
-a real Outlook appointment through the connector has not yet been verified.
+preserved. Each user must authorize their own Outlook connection. Live validation
+in Contoso Dev confirmed creation with exact saved endpoints, duplicate detection,
+and deletion of one explicitly authorized temporary appointment with no attendees.
+This check used the connected administrator's mailbox; validate other users'
+connections, roles, and tenant policies during rollout.
+
+The v1.0.6 hotfix corrects the native request body: the public SDK receives a
+typed appointment object and serializes it once. Passing JSON text through the
+generated binary-string signature double-encodes it and causes Graph to reject it
+with **Empty Payload. JSON content expected.** Generated files remain untouched.
+The regression suite exercises the actual installed SDK connector executor and
+its outgoing Blob, with only the host HTTP/identity boundary simulated. Explicit
+validation rejections show a concise error; timeouts and ambiguous failures still
+require a status check and acknowledged retry with the same protection ID.
 
 ## Request submission
 
@@ -498,8 +509,8 @@ admin”** button:
 
 ### Versioning & upgrades (don't reset existing data)
 
-The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.5`) and is the
-same number carried by the deployable solution (`v1.0.5` in the app → solution version `1.0.5.0`).
+The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.6`) and is the
+same number carried by the deployable solution (`v1.0.6` in the app → solution version `1.0.6.0`).
 
 **To ship an update to a tenant that already has the app — without wiping its data — re-import as an
 upgrade with a *higher* version number.** Dataverse only preserves existing rows when the incoming
@@ -517,15 +528,15 @@ Because the version travels *inside* the exported `.zip`, every shipped change m
 
 | Where | File / command | Format |
 | --- | --- | --- |
-| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.5` |
-| npm package | `package.json` → `version` | `1.0.5` |
-| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.5.0` | `1.0.5.0` |
+| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.6` |
+| npm package | `package.json` → `version` | `1.0.6` |
+| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.6.0` | `1.0.6.0` |
 
 **Release checklist for any future change:**
 
-1. Bump `APP_VERSION` in `src/version.ts` and the package/lockfile versions (e.g. `1.0.4` → `1.0.5`).
+1. Bump `APP_VERSION` in `src/version.ts` and the package/lockfile versions (e.g. `1.0.5` → `1.0.6`).
 2. `npm run build`.
-3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.5.0`.
+3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.6.0`.
 4. Re-push + re-bundle the app: `pac code push --solutionName AIChampionsHubApp`.
 5. Re-export both zips: `pac solution export --name AIChampionsHubApp --path .\deploy\solutions\AIChampionsHubApp_managed.zip --managed true --overwrite` (and again `--managed false` for the unmanaged zip).
 6. Commit the bumped sources **and** the refreshed zips together.

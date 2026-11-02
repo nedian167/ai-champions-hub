@@ -1,4 +1,6 @@
-import { OutlookSvc, type Abs_events } from '../data/entities';
+import { getClient } from '@microsoft/power-apps/data';
+import { dataSourcesInfo } from '../../.power/schemas/appschemas/dataSourcesInfo';
+import type { Abs_events } from '../data/entities';
 import { getEventSchedule } from './eventSchedule';
 
 type HubEvent = Pick<Abs_events, 'abs_eventid' | 'abs_name' | 'crd49_eventdate' | 'abs_eventend' | 'crd49_description' | 'crd49_location' | 'crd49_meetinglink'>;
@@ -10,15 +12,33 @@ const graphRoot = 'https://graph.microsoft.com/v1.0/me';
 const calendarFields = 'id,name,owner,canEdit,isDefaultCalendar';
 const sourceProperty = 'String {f34d6d4f-dfb8-49ef-85f4-4d60a077b0b7} Name AIChampionsHubEventId';
 const pendingAdds = new Map<string, Promise<CalendarAddResult>>();
+const outlookClient = getClient(dataSourcesInfo);
+type OutlookRequest = { Uri: string; Method: 'GET' | 'POST'; Body?: object; ContentType: string };
+
+class OutlookRequestRejectedError extends Error {}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function outlookErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  if (isRecord(error) && typeof error.message === 'string') return error.message;
+  const message = error instanceof Error ? error.message :
+    typeof error === 'string' ? error :
+    isRecord(error) && typeof error.message === 'string' ? error.message : undefined;
+  if (message !== undefined) {
+    if (message.trim().startsWith('{')) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(message);
+      } catch {
+        return message;
+      }
+      if (isRecord(parsed) && isRecord(parsed.error) && typeof parsed.error.message === 'string') {
+        return `${typeof parsed.error.code === 'string' ? `${parsed.error.code}: ` : ''}${parsed.error.message}`;
+      }
+    }
+    return message;
+  }
   return 'The Outlook connector returned an unexpected error. Check your connection and permissions.';
 }
 
@@ -35,16 +55,29 @@ function calendarPath(id: string): string {
 }
 
 async function graphRequest(uri: string, method: 'GET' | 'POST' = 'GET', body?: object): Promise<unknown> {
-  // The generated binary-string argument is raw UTF-8 JSON, not base64.
+  // The SDK JSON-serializes Body. The generated string signature would double-encode JSON.
   let deadline: ReturnType<typeof setTimeout> | undefined;
-  const request = OutlookSvc.HttpRequest(uri, method, body ? JSON.stringify(body) : undefined, 'application/json');
+  const request = outlookClient.executeAsync<OutlookRequest, unknown>({
+    connectorOperation: {
+      tableName: 'office365',
+      operationName: 'HttpRequest',
+      parameters: { Uri: uri, Method: method, Body: body, ContentType: 'application/json' },
+    },
+  });
   const result = await Promise.race([
     request,
     new Promise<never>((_, reject) => {
       deadline = setTimeout(() => reject(new Error('Outlook did not respond within 30 seconds. Check your connection and permissions.')), 30_000);
     }),
   ]).finally(() => clearTimeout(deadline));
-  if (!result.success) throw new Error(`Outlook request failed: ${outlookErrorMessage(result.error)}`);
+  if (!result.success) {
+    const detail = outlookErrorMessage(result.error);
+    const status = isRecord(result.error) ? result.error.status : undefined;
+    if (method === 'POST' && typeof status === 'number' && [400, 401, 403, 404, 405, 413, 415, 422].includes(status)) {
+      throw new OutlookRequestRejectedError(`Outlook rejected the appointment request (${status}). ${detail}`);
+    }
+    throw new Error(`Outlook request failed: ${detail}`);
+  }
   const data: unknown = result.data;
   if (isRecord(data) && 'error' in data) throw new Error(`Outlook request failed: ${outlookErrorMessage(data.error)}`);
   if (!isRecord(data)) {
@@ -182,6 +215,7 @@ async function performAdd(event: HubEvent, calendarId: string): Promise<Calendar
       throw new OutlookCreationUncertainError(`Creation: ${outlookErrorMessage(writeError)} Status check: ${outlookErrorMessage(checkError)}`);
     }
     if (recovered) return { event: recovered, status: 'recovered' };
+    if (writeError instanceof OutlookRequestRejectedError) throw writeError;
     throw new OutlookCreationUncertainError(outlookErrorMessage(writeError));
   }
 }

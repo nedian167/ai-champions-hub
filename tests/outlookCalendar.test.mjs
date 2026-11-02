@@ -3,15 +3,43 @@ import { beforeEach, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 
+const sdkData = import.meta.resolve('@microsoft/power-apps/data');
+const executorPath = fileURLToPath(new URL('../internal/data/core/data/executors/connectorDataOperationExecutor.js', sdkData));
+const runtimePath = fileURLToPath(new URL('../internal/data/core/runtimeClient/runtimeDataClient.js', sdkData));
+const servicePath = fileURLToPath(new URL('../src/generated/services/Office365OutlookService.ts', import.meta.url));
 const bundle = await build({
   configFile: false,
   logLevel: 'silent',
   plugins: [{
     name: 'outlook-test-services',
     enforce: 'pre',
-    resolveId(id) { if (id === '../data/entities') return '\0outlook-test-services'; },
+    resolveId(id) {
+      if (id === '../data/entities') return '\0outlook-test-services';
+      if (id === '@microsoft/power-apps/data') return '\0outlook-test-sdk';
+    },
     load(id) {
-      if (id === '\0outlook-test-services') return 'export const OutlookSvc = { HttpRequest: (...args) => globalThis.__outlookRequest(...args) };';
+      if (id === '\0outlook-test-services') return `export { Office365OutlookService as OutlookSvc } from ${JSON.stringify(servicePath)};`;
+      if (id === '\0outlook-test-sdk') return `
+        import { ConnectorDataOperationExecutor } from ${JSON.stringify(executorPath)};
+        import { RuntimeDataClient } from ${JSON.stringify(runtimePath)};
+        export function getClient(metadata) {
+          const runtime = new RuntimeDataClient({
+            execute: (...args) => globalThis.__outlookTransport(...args),
+          });
+          const executor = new ConnectorDataOperationExecutor({
+            getDataClientAsync: async () => runtime,
+            getMetadataClientAsync: async () => ({
+              getAppConnectionConfigsAsync: async () => ({ data: { office365: {
+                apiId: '/providers/Microsoft.PowerApps/apis/shared_office365',
+                runtimeUrl: 'https://connector.example.test/apim/office365',
+                connectionName: 'test-connection',
+              } } }),
+              getAppDataSourceConfigsAsync: async () => ({ data: {} }),
+            }),
+          }, { getDataSource: async (name) => metadata[name] });
+          return { executeAsync: (operation) => executor.executeAsync(operation) };
+        }
+      `;
     },
   }],
   build: {
@@ -23,8 +51,8 @@ const bundle = await build({
 const code = (Array.isArray(bundle) ? bundle : [bundle])
   .flatMap((result) => result.output).find((output) => output.type === 'chunk').code;
 assert.ok(!code.includes('powerAppsBridge'), 'Tests must never initialize the real Outlook SDK');
-assert.match(code, /__outlookRequest/);
-const { addToOutlookCalendar, findOutlookEvent, listOutlookCalendars, OutlookCreationUncertainError } =
+assert.match(code, /__outlookTransport/);
+const { addToOutlookCalendar, findOutlookEvent, listOutlookCalendars, OutlookCreationUncertainError, outlookErrorMessage } =
   await import(`data:text/javascript;base64,${Buffer.from(`${code}\n//# sourceURL=outlook-test-module.mjs`).toString('base64')}`);
 
 const hubId = 'c850babb-65cf-47e1-a17f-22995a2e82b8';
@@ -55,6 +83,29 @@ beforeEach(() => {
   intercept = undefined;
   writeFailure = undefined;
   persistFailedWrite = false;
+  globalThis.__outlookTransport = async (service, action, args) => {
+    if (action === 'getAppAccessTokenAsync') return { data: 'test-only-token' };
+    assert.equal(service, 'AppHttpClientPlugin');
+    assert.equal(action, 'sendHttpAsync');
+    const [request, blob] = args;
+    assert.equal(new URL(request.url).origin, 'https://connector.example.test');
+    assert.equal(request.method, 'POST');
+    assert.ok(blob instanceof Blob, 'Exercise the actual SDK Blob sent to the Power Apps host');
+    assert.equal(blob.type, 'application/json');
+    let response;
+    try {
+      response = await globalThis.__outlookRequest(
+        request.headers.Uri, request.headers.Method, await blob.text(), request.headers.ContentType,
+      );
+    } catch (failure) {
+      throw [[failure.message]];
+    }
+    if (!response.success) throw [[response.error.message, null, { status: response.error.status }]];
+    return { data: [
+      { headers: { 'Content-Type': 'application/json' } },
+      new TextEncoder().encode(JSON.stringify(response.data)).buffer,
+    ] };
+  };
   globalThis.__outlookRequest = async (uri, method, body, contentType) => {
     const request = { uri, url: new URL(uri), method, body, contentType };
     requests.push(request);
@@ -64,7 +115,7 @@ beforeEach(() => {
     }
     if (method === 'POST') {
       assert.equal(contentType, 'application/json');
-      assert.doesNotThrow(() => JSON.parse(body), 'Generated binary argument must receive raw JSON, not base64');
+      assert.equal(typeof JSON.parse(body), 'object', 'The wire body must be an appointment object, not double-encoded JSON');
       if (!writeFailure || persistFailedWrite) events.push(saved);
       if (writeFailure) throw writeFailure;
       return { success: true, data: saved };
@@ -163,6 +214,55 @@ test('creates a personal appointment using the exact saved start/end and no invi
   assert.ok(requests.every(({ url }) => url.origin === 'https://graph.microsoft.com' && url.pathname.startsWith('/v1.0/me/')));
 });
 
+test('SDK wire body is an appointment object, not quoted JSON text', async () => {
+  const event = { ...hub, abs_name: 'Copilot workshop 🚀', crd49_description: 'Café — 日本語 and العربية' };
+  intercept = ({ method }) => method === 'POST' ? { success: true, data: saved } : undefined;
+  await addToOutlookCalendar(event, primary.id);
+  const body = JSON.parse(posts()[0].body);
+  assert.equal(typeof body, 'object', 'The native connector must receive a JSON object after one parse');
+  assert.equal(body.subject, event.abs_name);
+  assert.ok(body.body.content.includes(event.crd49_description), 'UTF-8 content survives SDK Blob serialization');
+});
+
+test('a definite Graph validation rejection shows its message rather than an uncertain creation warning', async () => {
+  intercept = ({ method }) => method === 'POST' ? { success: false, error: {
+    status: 400,
+    message: JSON.stringify({ error: {
+      code: 'BadRequest', message: 'Empty Payload. JSON content expected.',
+      innerError: { 'request-id': 'diagnostic-id', date: '2026-11-02T13:30:26' },
+    } }),
+  } } : undefined;
+  await assert.rejects(addToOutlookCalendar(hub, primary.id), (error) =>
+    !(error instanceof OutlookCreationUncertainError) &&
+    error.message === 'Outlook rejected the appointment request (400). BadRequest: Empty Payload. JSON content expected.');
+  assert.equal(posts().length, 1);
+});
+
+for (const status of [408, 429, 500, 502, 503, 504]) {
+  test(`HTTP ${status} preserves uncertain-write safeguards and never automatically retries`, async () => {
+    intercept = ({ method }) => method === 'POST' ?
+      { success: false, error: { status, message: 'Request interrupted or temporarily unavailable' } } : undefined;
+    await assert.rejects(addToOutlookCalendar(hub, primary.id), OutlookCreationUncertainError);
+    assert.equal(posts().length, 1);
+  });
+}
+
+test('an existing durable copy is recovered even when the new request is explicitly rejected', async () => {
+  intercept = ({ method }) => {
+    if (method !== 'POST') return;
+    events = [saved];
+    return { success: false, error: { status: 400, message: 'Request rejected' } };
+  };
+  assert.equal((await addToOutlookCalendar(hub, primary.id)).status, 'recovered');
+  assert.equal(posts().length, 1);
+});
+
+test('unstructured and malformed error messages remain visible without parsing failures', () => {
+  assert.equal(outlookErrorMessage(new Error('Connection denied')), 'Connection denied');
+  assert.equal(outlookErrorMessage({ message: '{not JSON' }), '{not JSON');
+  assert.equal(outlookErrorMessage('{"other":"response"}'), '{"other":"response"}');
+});
+
 test('an existing durable marker prevents another POST even after Hub dates or title change', async () => {
   events = [saved];
   const result = await addToOutlookCalendar({
@@ -257,7 +357,7 @@ test('a failed recovery check preserves both errors and does not report success'
   writeFailure = new Error('Write timed out');
   intercept = ({ url, method }) => method === 'GET' && url.pathname.endsWith('/events') && posts().length ?
     { success: false, error: { message: 'Status unavailable' } } : undefined;
-  await assert.rejects(addToOutlookCalendar(hub, primary.id), /Creation: Write timed out Status check:.*Status unavailable/);
+  await assert.rejects(addToOutlookCalendar(hub, primary.id), /Creation:.*Write timed out Status check:.*Status unavailable/);
   assert.equal(posts().length, 1);
 });
 

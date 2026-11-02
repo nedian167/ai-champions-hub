@@ -135,7 +135,7 @@ pac code push
 
 - The 13 Dataverse data sources are already declared in `power.config.json` and the generated
   models under `src/generated/`. Because the target uses the **same `abs_` schema** you just
-  imported, these bind as-is. The v1.0.5 packages include the additional event end
+  imported, these bind as-is. The v1.0.6 packages include the additional event end
   column described below.
 - If you ever need to regenerate a model (e.g. after a schema tweak), run
   `pac code add-data-source -a dataverse -t <logical_name>` for that table.
@@ -144,7 +144,7 @@ pac code push
 
 ### Event schedule schema
 
-The v1.0.5 solution packages include this column in
+The v1.0.6 solution packages include this column in
 **AIChampionsHubApp → Event (`abs_event`)**. If pushing source directly to an older
 environment without importing the updated solution, add it first:
 
@@ -184,11 +184,11 @@ organizations requiring signed scripts can use the maker UI instead.
 
 Then run `pac code add-data-source -a dataverse -t abs_event` and build. Do not edit
 generated TypeScript manually. The checked-in managed and unmanaged solution
-archives are version 1.0.5.0 and include this column and the updated Code App.
+archives are version 1.0.6.0 and include this column and the updated Code App.
 
 ### Outlook connection and rollout
 
-The Outlook module is included in the v1.0.5 app and v1.0.5.0 solution packages.
+The Outlook module is included in the v1.0.6 app and v1.0.6.0 solution packages.
 Import the updated solution or build and push the source above to enable it.
 
 Office 365 Outlook is a **non-shareable, per-user connection**. The developer's
@@ -212,8 +212,10 @@ are correct. With the mailbox owner's permission, create one test personal
 appointment, reopen the dialog to check duplicate detection, and remove that test
 appointment directly in Outlook. Repeat for an end user, program manager, and app
 admin, including an admin without a Champion profile. This live tenant check cannot
-be replaced by the mock-backed regression suite. Live appointment creation through
-the native connector remains unverified for this release.
+be replaced by the regression suite. The v1.0.6 native connector was verified in
+Contoso Dev using the connected administrator's mailbox: one authorized temporary
+appointment was created, read back with exact start/end and no attendees, found
+on a duplicate add, and deleted. Repeat the check for other users and environments.
 
 Do not silently enable synchronization: Hub edits/cancellations/deletion never
 modify existing Outlook copies. In uncertain-outcome cases, inspect Outlook and use
@@ -246,6 +248,7 @@ Then add champions (**Champions → Add Champion**) and create your first campai
 | People picker returns nothing | The Office 365 Users connection is missing/expired — recreate it and re-run step 2. |
 | Outlook connection or permission error | Sign in with the intended tenant account and authorize/reconnect that user's Office 365 Outlook connection; verify Exchange licensing, DLP, and calendar permissions. Other Hub data does not depend on these on-demand Outlook reads. |
 | Outlook creation outcome is uncertain | Do not blindly retry. Use **Check Outlook status**, inspect the selected calendar, and confirm a retry only if no copy exists. The app reuses its stable transaction ID. |
+| Outlook reports **Empty Payload. JSON content expected.** | Deploy v1.0.6 or later. Its typed SDK request passes the appointment object directly, avoiding double-encoded JSON from the generated binary-string argument. Do not edit the generated connector schema or service. |
 | Evidence links won't save | Set a valid **SharePoint document library URL** in Settings; the shipped roles already grant Create/Read on `abs_claimevidence`. |
 | `pac code push` says app not found | Run `pac code init` first (Part 2, Option B) to create the app in the target env. |
 | Imported app won't launch / shows connector errors | Code App ALM is in preview — re-push from source (Part 2, Option B) to re-bind connectors in the target env. |
@@ -260,7 +263,7 @@ The Code App is added to the `AIChampionsHubApp` solution using the Power Platfo
 ```powershell
 # From the repo root, authenticated to the SOURCE env:
 npm run build
-pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.5.0
+pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.6.0
 pac code push --solutionName AIChampionsHubApp
 
 # Then re-export both packages:
