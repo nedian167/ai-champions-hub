@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$Api,
-    [Parameter(Mandatory = $true)][hashtable]$Headers
+    [Parameter(Mandatory = $true)][hashtable]$Headers,
+    [switch]$ExercisePipeline
 )
 
 $ErrorActionPreference = 'Stop'
@@ -70,14 +71,47 @@ foreach ($role in $roles) {
 }
 $preferences = @( (Request GET "abs_notificationpreferences?`$filter=abs_entraobjectid eq '$($user.azureactivedirectoryobjectid)'" $null).value )
 Check ($preferences.Count -le 1) 'At most one preference record matches the administrator.'
-if (-not $preferences.Count) {
+if ($ExercisePipeline -and -not $preferences.Count) {
     Request POST 'abs_notificationpreferences' @{ abs_name = 'Notification preferences' } | Out-Null
 }
-$preference = Request GET "abs_notificationpreferences($id)" $null
-Check ($preference.abs_entraobjectid -eq $user.azureactivedirectoryobjectid -and $preference._ownerid_value -eq $id) 'Preference identity and ownership are stamped by the server.'
-Check ($preference.abs_requests -eq 0 -and $preference.abs_claims -eq 0 -and $preference.abs_campaigns -eq 0 -and $preference.abs_reminders -eq 0) 'All administrator notification categories remain off.'
+if ($preferences.Count -or $ExercisePipeline) {
+    $preference = Request GET "abs_notificationpreferences($id)" $null
+    Check ($preference.abs_entraobjectid -eq $user.azureactivedirectoryobjectid -and $preference._ownerid_value -eq $id) 'Preference identity and ownership are stamped by the server.'
+    if ($ExercisePipeline) {
+        Check ($preference.abs_requests -eq 0 -and $preference.abs_claims -eq 0 -and $preference.abs_campaigns -eq 0 -and $preference.abs_reminders -eq 0) 'All administrator notification categories remain off.'
+    }
+}
 $steps = @( (Request GET "sdkmessageprocessingsteps?`$select=sdkmessageprocessingstepid,name,stage,mode&`$filter=startswith(name,'AI Champions Hub Notifications - ')" $null).value )
-Check ($steps.Count -eq 9 -and @($steps | Where-Object mode -ne 0).Count -eq 0) 'All nine synchronous notification plug-in registrations exist.'
+Check ($steps.Count -eq 12 -and @($steps | Where-Object mode -ne 0).Count -eq 0) 'All twelve synchronous notification plug-in registrations exist.'
+foreach ($registration in @(
+    @{ Name = 'Template settings create'; Stage = 10 },
+    @{ Name = 'Template settings update'; Stage = 20 },
+    @{ Name = 'Template settings delete'; Stage = 10 }
+)) {
+    $step = @($steps | Where-Object name -eq "AI Champions Hub Notifications - $($registration.Name)")
+    Check ($step.Count -eq 1 -and $step[0].stage -eq $registration.Stage) "$($registration.Name) runs at its required validation stage."
+}
+foreach ($column in @('abs_notificationtemplates', 'abs_notificationtemplatecommand')) {
+    $spec = $schema.addColumns.abs_programsettings.$column
+    $metadata = Request GET "EntityDefinitions(LogicalName='abs_programsettings')/Attributes(LogicalName='$column')/Microsoft.Dynamics.CRM.MemoAttributeMetadata?`$select=MaxLength" $null
+    Check ($metadata.MaxLength -eq $spec.length) "$column supports the complete validated payload size."
+}
+$settings = @( (Request GET 'abs_programsettingses?$select=abs_programsettingsid,abs_notificationtemplates,abs_notificationtemplatecommand,abs_notificationtemplatelock' $null).value )
+Check ($settings.Count -eq 1) 'Exactly one Program Settings record is available to the template editor.'
+$before = $settings[0]
+$configuration = if ($null -eq $before.abs_notificationtemplates) { '{"version":1,"templates":[]}' } else { $before.abs_notificationtemplates }
+$command = @{ expected = [guid]::NewGuid().ToString(); configuration = $configuration } | ConvertTo-Json -Compress
+try {
+    Request PATCH "abs_programsettingses($($before.abs_programsettingsid))" @{ abs_notificationtemplatecommand = $command } | Out-Null
+    throw 'The server unexpectedly accepted a stale template command.'
+} catch {
+    if (-not $_.ErrorDetails.Message -or $_.ErrorDetails.Message -notmatch 'Templates changed since you opened the editor') { throw }
+    Write-Output 'PASS Native template commands reach the reviewer-authorized concurrency guard.'
+}
+$after = Request GET "abs_programsettingses($($before.abs_programsettingsid))?`$select=abs_notificationtemplates,abs_notificationtemplatecommand,abs_notificationtemplatelock" $null
+Check ($after.abs_notificationtemplates -eq $before.abs_notificationtemplates -and
+    $after.abs_notificationtemplatecommand -eq $before.abs_notificationtemplatecommand -and
+    $after.abs_notificationtemplatelock -eq $before.abs_notificationtemplatelock) 'Rejected template commands roll back without changing settings or retaining their lock.'
 $componentIds += $steps.sdkmessageprocessingstepid
 $flows = @( (Request GET "workflows?`$select=workflowid,name,statecode&`$filter=name eq 'AI Champions Hub - Deliver notifications' or name eq 'AI Champions Hub - Daily reminders'" $null).value )
 Check ($flows.Count -eq 2) 'Both native notification flow definitions are saved.'
@@ -100,6 +134,10 @@ foreach ($component in $componentIds) {
     Check ($components -contains $component) "Notification component $component belongs to the Hub solution."
 }
 Check (@($flows | Where-Object statecode -eq 1).Count -eq 0) 'Outbound flows are off during development verification.'
+if (-not $ExercisePipeline) {
+    Write-Output 'Live backend verification completed without creating business records, preparing deliveries, changing preferences, or sending messages.'
+    return
+}
 $optedIn = @( (Request GET 'abs_notificationpreferences?$select=abs_notificationpreferenceid&$filter=abs_requests gt 0 or abs_claims gt 0 or abs_campaigns gt 0 or abs_reminders gt 0&$top=1' $null).value )
 Check ($optedIn.Count -eq 0) 'No recipients are opted in during temporary business-record verification.'
 $result = Request POST 'abs_NotificationWork' @{ Operation = 'prepare'; RecordId = ''; Outcome = '' }

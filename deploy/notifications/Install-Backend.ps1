@@ -135,6 +135,9 @@ Step 'Claim create' 'abs_activityclaim' 'Create' 40 '' ''
 Step 'Claim update' 'abs_activityclaim' 'Update' 40 'crd49_status' 'crd49_status'
 Step 'Campaign create' 'abs_campaign' 'Create' 40 '' ''
 Step 'Campaign update' 'abs_campaign' 'Update' 40 'crd49_status,abs_notificationready' 'crd49_status,abs_notificationready'
+Step 'Template settings create' 'abs_programsettings' 'Create' 10 '' ''
+Step 'Template settings update' 'abs_programsettings' 'Update' 20 'abs_notificationtemplates,abs_notificationtemplatecommand' ''
+Step 'Template settings delete' 'abs_programsettings' 'Delete' 10 '' ''
 
 $roles = @( (Request GET "roles?`$select=roleid,name&`$filter=name eq 'AI Champions Hub Users' or name eq 'AI Champions Hub Admins'" $null).value )
 if (-not $roles.Count) { throw 'The Hub security roles must exist before installing notifications.' }
@@ -196,4 +199,4 @@ if ($configuration.enableFlows) {
     foreach ($id in $installedFlows) { Request PATCH "workflows($id)" @{ statecode = 1; statuscode = 2 } | Out-Null }
 }
 Request POST 'PublishAllXml' @{} | Out-Null
-Write-Output 'Notification backend installed. Existing users remain opted out.'
+Write-Output 'Notification backend installed. Existing user preferences were not changed.'

@@ -17,6 +17,7 @@ while (-not (Test-Path -LiteralPath $stopPath)) {
     Remove-Item -LiteralPath $requestPath
     try {
         switch ($job.action) {
+            'pause' { & (Join-Path $PSScriptRoot 'Pause-Notifications.ps1') -Api $Api -Headers $Headers }
             'schema' { & (Join-Path $PSScriptRoot 'Install-Schema.ps1') -Api $Api -Headers $Headers }
             'backend' { & (Join-Path $PSScriptRoot 'Install-Backend.ps1') -Api $Api -Headers $Headers -ConfigurationPath $job.configuration }
             'verify' { & (Join-Path $PSScriptRoot 'Test-Backend.ps1') -Api $Api -Headers $Headers }

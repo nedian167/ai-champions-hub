@@ -20,6 +20,8 @@ const bundle = await build({
         `export * from '${root}src/lib/notifications.ts';`,
         `export * from '${root}src/data/notifications.ts';`,
         `export * from '${root}src/lib/requestThread.ts';`,
+        `export * from '${root}src/lib/notificationTemplates.ts';`,
+        `export * from '${root}src/data/notificationTemplates.ts';`,
       ].join('\n');
       if (id === '\0notification-client') return 'export const getClient = () => globalThis.__notificationClientTest;';
     },
@@ -35,10 +37,15 @@ const preferenceId = '22222222-2222-2222-2222-222222222222';
 let stored;
 let calls;
 let failure;
+let templateRaw;
+let templateConflict;
 globalThis.__notificationClientTest = {
   async retrieveMultipleRecordsAsync(table, options) {
     calls.push({ operation: 'read', table, options });
     if (failure) return failure;
+    if (table === 'abs_programsettingses') return { success: true, data: [{
+      abs_programsettingsid: preferenceId, abs_notificationtemplates: templateRaw,
+    }] };
     return { success: true, data: table === 'abs_notificationpreferences' ? stored : [] };
   },
   async createRecordAsync(table, record) {
@@ -50,12 +57,99 @@ globalThis.__notificationClientTest = {
   async updateRecordAsync(table, id, record) {
     calls.push({ operation: 'update', table, id, record });
     if (failure) return failure;
+    if (table === 'abs_programsettingses') {
+      const command = JSON.parse(record.abs_notificationtemplatecommand);
+      if (templateConflict || command.expected !== templateRaw) return { success: false, error: { message: 'Templates changed since you opened the editor.' } };
+      templateRaw = command.configuration;
+      return { success: true };
+    }
     stored = [{ ...stored[0], ...record }];
     return { success: true };
   },
 };
 const api = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
-beforeEach(() => { stored = []; calls = []; failure = null; });
+beforeEach(() => { stored = []; calls = []; failure = null; templateRaw = null; templateConflict = false; });
+
+test('every notification type has a valid structured default without sensitive excerpts', () => {
+  assert.equal(api.templateKinds.length, 12);
+  for (const [kind] of api.templateKinds) {
+    const item = api.defaultTemplate(kind);
+    assert.deepEqual(api.validateTemplate(item), item);
+    assert.ok(!item.fields.includes('Description') && !item.fields.includes('Reply'));
+    assert.equal(item.includeMeetingLink, false);
+  }
+});
+test('template configuration supports overrides and reset to defaults', () => {
+  assert.deepEqual(api.readTemplateConfiguration(null), { version: 1, templates: [] });
+  const config = { version: 1, templates: [api.defaultTemplate('remind-event')] };
+  assert.deepEqual(api.readTemplateConfiguration(JSON.stringify(config)), config);
+});
+for (const raw of ['broken', '{"version":2,"templates":[]}', '{"version":1,"templates":null}',
+  '{"version":1,"templates":[],"unexpected":true}']) {
+  test(`invalid template configuration fails visibly: ${raw}`, () => assert.throws(() => api.readTemplateConfiguration(raw)));
+}
+test('unknown kinds, fields, duplicates and properties fail closed', () => {
+  const item = api.defaultTemplate('request.created');
+  assert.throws(() => api.validateTemplate({ ...item, kind: 'unknown' }));
+  assert.throws(() => api.validateTemplate({ ...item, fields: ['EventStart'] }));
+  assert.throws(() => api.validateTemplate({ ...item, fields: ['Status', 'Status'] }));
+  assert.throws(() => api.validateTemplate({ ...item, cardJson: '{}' }));
+  assert.throws(() => api.readTemplateConfiguration(JSON.stringify({ version: 1, templates: [item, item] })), /Duplicate/);
+});
+for (const input of ['{Unknown}', '{EventStart}', '{Title', 'Title}', 'Nested {{Title}}']) {
+  test(`invalid placeholder rejected: ${input}`, () => assert.throws(() => api.validateTemplate({
+    ...api.defaultTemplate('request.created'), message: input,
+  })));
+}
+test('description and reply placeholders require explicit excerpt selection', () => {
+  const item = api.defaultTemplate('request.reply.admin');
+  assert.throws(() => api.validateTemplate({ ...item, message: '{Reply}' }), /Select/);
+  assert.throws(() => api.validateTemplate({ ...item, message: '{Description}' }), /Select/);
+  assert.ok(api.validateTemplate({ ...item, message: '{Reply}', fields: [...item.fields, 'Reply'] }));
+});
+test('subjects are single-line and all fields have bounded lengths', () => {
+  const item = api.defaultTemplate('request.created');
+  for (const [key, max] of [['heading', 120], ['subject', 200], ['message', 1200], ['actionLabel', 40]]) {
+    assert.throws(() => api.validateTemplate({ ...item, [key]: 'x'.repeat(max + 1) }));
+    assert.throws(() => api.validateTemplate({ ...item, [key]: '' }));
+  }
+  assert.throws(() => api.validateTemplate({ ...item, subject: 'Subject\r\nInjected: header' }));
+  assert.throws(() => api.validateTemplate({ ...item, message: '\u0000' }));
+  assert.ok(api.validateTemplate({ ...item, message: 'Multiline\nmessage' }));
+});
+test('only event reminders can expose a Join meeting action', () => {
+  assert.throws(() => api.validateTemplate({ ...api.defaultTemplate('request.created'), includeMeetingLink: true }));
+  assert.ok(api.validateTemplate({ ...api.defaultTemplate('remind-event'), includeMeetingLink: true }));
+});
+test('placeholder values are inserted once, never recursively interpreted', () => {
+  assert.equal(api.expandTemplate('Request {Title}', { Title: '{Description}' }), 'Request {Description}');
+});
+test('SDK facade saves an authenticated baseline command and confirms read-back', async () => {
+  const saved = await api.loadNotificationTemplates();
+  const config = { version: 1, templates: [api.defaultTemplate('request.created')] };
+  const result = await api.saveNotificationTemplates(saved, config);
+  const write = calls.find((call) => call.operation === 'update');
+  assert.equal(write.table, 'abs_programsettingses');
+  assert.equal(write.id, preferenceId);
+  assert.deepEqual(Object.keys(write.record), ['abs_notificationtemplatecommand']);
+  assert.deepEqual(JSON.parse(write.record.abs_notificationtemplatecommand), { expected: null, configuration: JSON.stringify(config) });
+  assert.deepEqual(result.configuration, config);
+});
+test('stale client baselines and transaction-time conflicts do not report successful template saves', async () => {
+  const saved = await api.loadNotificationTemplates();
+  templateRaw = '{"version":1,"templates":[]}';
+  await assert.rejects(api.saveNotificationTemplates(saved, { version: 1, templates: [] }), /changed/);
+  assert.ok(!calls.some((call) => call.operation === 'update'));
+  const current = await api.loadNotificationTemplates();
+  templateConflict = true;
+  await assert.rejects(api.saveNotificationTemplates(current, { version: 1, templates: [] }), /changed/);
+});
+test('template read/save permission errors are visible', async () => {
+  const saved = await api.loadNotificationTemplates();
+  failure = { success: false, error: { message: 'Permission denied' } };
+  await assert.rejects(api.loadNotificationTemplates(), /Permission denied/);
+  await assert.rejects(api.saveNotificationTemplates(saved, { version: 1, templates: [] }), /Permission denied/);
+});
 
 test('all categories start off without opting users in', () => {
   assert.deepEqual(api.defaultNotificationSettings, {

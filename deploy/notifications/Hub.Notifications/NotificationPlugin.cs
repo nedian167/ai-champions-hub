@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Net;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Security.Cryptography;
@@ -30,8 +29,18 @@ namespace Hub.Notifications
                 context.OutputParameters["Result"] = Json.Write(worker.Work(operation, idText, outcome));
                 return;
             }
+            if (context.MessageName == "Delete" && context.Stage == 10 &&
+                context.InputParameters.Contains("Target") && context.InputParameters["Target"] is EntityReference deleted &&
+                deleted.LogicalName == "abs_programsettings")
+            {
+                worker.TemplateDeletion(deleted.Id);
+                return;
+            }
             if (!context.InputParameters.Contains("Target") || !(context.InputParameters["Target"] is Entity target)) return;
-            if (target.LogicalName == "abs_notificationpreference" &&
+            if (target.LogicalName == "abs_programsettings" &&
+                (context.MessageName == "Create" && context.Stage == 10 || context.MessageName == "Update" && context.Stage == 20))
+                worker.Templates(target);
+            else if (target.LogicalName == "abs_notificationpreference" &&
                 (context.MessageName == "Create" && context.Stage == 10 || context.MessageName == "Update" && context.Stage == 20))
                 worker.Preference(target);
             else if (target.LogicalName == "abs_request" && context.Stage == 20)
@@ -55,6 +64,51 @@ namespace Hub.Notifications
             this.service = service;
             this.context = context;
             this.trace = trace;
+        }
+
+        private bool CanEditTemplates(Entity actor)
+        {
+            if (actor.GetAttributeValue<bool>("isdisabled") || actor.GetAttributeValue<Guid>("azureactivedirectoryobjectid") == Guid.Empty) return false;
+            var champion = Champion(actor);
+            if (champion != null && Choice(champion, "crd49_status") != Rejected && Choice(champion, "crd49_role") == InReview) return true;
+            var query = Query("abs_appadmin", "abs_userid", actor.GetAttributeValue<string>("domainname") ?? "");
+            query.TopCount = 1;
+            return service.RetrieveMultiple(query).Entities.Count != 0;
+        }
+        internal void TemplateDeletion(Guid id)
+        {
+            var settings = Get("abs_programsettings", id);
+            if (!string.IsNullOrEmpty(settings?.GetAttributeValue<string>("abs_notificationtemplates")) &&
+                !CanEditTemplates(User(context.InitiatingUserId)))
+                throw new InvalidPluginExecutionException("Only a persistent program manager or app admin can remove configured notification templates.");
+        }
+        internal void Templates(Entity target)
+        {
+            if (!target.Contains("abs_notificationtemplates") && !target.Contains("abs_notificationtemplatecommand")) return;
+            if (!CanEditTemplates(User(context.InitiatingUserId)))
+                throw new InvalidPluginExecutionException("Only a persistent program manager or app admin can change notification templates.");
+            if (target.Contains("abs_notificationtemplatecommand"))
+            {
+                if (context.MessageName != "Update" || target.Contains("abs_notificationtemplates"))
+                    throw new InvalidPluginExecutionException("Submit a template update command without a direct configuration write.");
+                var text = target.GetAttributeValue<string>("abs_notificationtemplatecommand");
+                if (text == null || text.Length > 210000) throw new InvalidPluginExecutionException("Invalid template update command.");
+                var command = NotificationContent.ReadCommand(text);
+                if (command == null || command.configuration == null)
+                    throw new InvalidPluginExecutionException("Invalid template update command.");
+                NotificationContent.Read(command.configuration);
+                service.Update(new Entity("abs_programsettings", target.Id) { ["abs_notificationtemplatelock"] = Guid.NewGuid().ToString("D") });
+                var existing = Get("abs_programsettings", target.Id) ?? throw new InvalidPluginExecutionException("Program Settings not found.");
+                if (existing.GetAttributeValue<string>("abs_notificationtemplates") != command.expected)
+                    throw new InvalidPluginExecutionException("Templates changed since you opened the editor. Refresh before saving.");
+                target["abs_notificationtemplates"] = command.configuration;
+                target["abs_notificationtemplatecommand"] = null;
+            }
+            else
+            {
+                if (context.MessageName != "Create") throw new InvalidPluginExecutionException("Use the template editor update command to change templates.");
+                NotificationContent.Read(target.GetAttributeValue<string>("abs_notificationtemplates"));
+            }
         }
 
         internal void Preference(Entity target)
@@ -188,6 +242,7 @@ namespace Hub.Notifications
                 ["abs_source"] = source.LogicalName,
                 ["abs_sourceid"] = source.Id.ToString("D"),
                 ["abs_actorid"] = context.InitiatingUserId.ToString("D"),
+                ["abs_messageid"] = kind.StartsWith("request.reply.", StringComparison.Ordinal) ? revision : "",
                 ["abs_expectedstatus"] = Math.Max(0, Choice(source, "crd49_status")),
                 ["abs_state"] = 0,
                 ["abs_page"] = 1
@@ -263,8 +318,8 @@ namespace Hub.Notifications
                         var id = StableId(item.Id + "|" + recipient.Id + "|" + channel);
                         if (Get("abs_notificationdelivery", id) != null) continue;
                         var delivery = new Entity("abs_notificationdelivery", id);
-                        foreach (var field in new[] { "abs_kind", "abs_source", "abs_sourceid", "abs_actorid", "abs_expectedstatus" })
-                            delivery[field] = item[field];
+                        foreach (var field in new[] { "abs_kind", "abs_source", "abs_sourceid", "abs_actorid", "abs_expectedstatus", "abs_messageid" })
+                            if (item.Contains(field)) delivery[field] = item[field];
                         delivery["abs_name"] = Title(item, source);
                         delivery["ownerid"] = recipient.ToEntityReference();
                         delivery["abs_recipientobjectid"] = recipient.GetAttributeValue<Guid>("azureactivedirectoryobjectid").ToString("D");
@@ -300,23 +355,91 @@ namespace Hub.Notifications
                 Update(delivery, Field("abs_state", Failed), Field("abs_error", "The recipient has no usable Teams identity or email address."));
                 return new WorkResult();
             }
-            var title = Title(delivery, source);
-            var summary = Summary(delivery);
             var url = Link(delivery);
-            var card = "{\"$schema\":\"http://adaptivecards.io/schemas/adaptive-card.json\",\"type\":\"AdaptiveCard\",\"version\":\"1.4\",\"body\":[" +
-                "{\"type\":\"TextBlock\",\"text\":\"AI Champions Hub\",\"weight\":\"Bolder\",\"wrap\":true}," +
-                "{\"type\":\"TextBlock\",\"text\":" + Json.Write(Markdown(title)) + ",\"weight\":\"Bolder\",\"wrap\":true}," +
-                "{\"type\":\"TextBlock\",\"text\":" + Json.Write(summary) + ",\"wrap\":true}]," +
-                "\"actions\":[{\"type\":\"Action.OpenUrl\",\"title\":\"Open in Hub\",\"url\":" + Json.Write(url) + "}]}";
+            var kind = delivery.GetAttributeValue<string>("abs_kind")!;
+            var configuration = TemplateSettings();
+            var template = configuration.templates!.SingleOrDefault(item => item.kind == kind) ?? NotificationContent.Default(kind);
+            var payload = NotificationContent.Render(template, ContentValues(delivery, source), url,
+                kind == "remind-event" ? source.GetAttributeValue<string>("crd49_meetinglink") : null);
             CompareUpdate(delivery, Field("abs_state", Sending), Field("abs_error", null));
-            return new WorkResult
+            payload.send = true;
+            payload.channel = channel;
+            payload.recipient = channel == 1 ? upn : mail;
+            return payload;
+        }
+
+        private TemplateConfiguration TemplateSettings()
+        {
+            var query = new QueryExpression("abs_programsettings") { ColumnSet = new ColumnSet("abs_notificationtemplates"), TopCount = 2 };
+            var settings = service.RetrieveMultiple(query).Entities;
+            if (settings.Count > 1) throw new InvalidPluginExecutionException("Multiple Program Settings records make notification templates ambiguous.");
+            return NotificationContent.Read(settings.FirstOrDefault()?.GetAttributeValue<string>("abs_notificationtemplates"));
+        }
+        private string ReferenceName(Entity source, string field)
+        {
+            var reference = source.GetAttributeValue<EntityReference>(field);
+            if (reference == null) return "";
+            var row = Get(reference.LogicalName, reference.Id);
+            if (row == null) return "";
+            var name = row.LogicalName == "abs_champion" ? row.GetAttributeValue<string>("crd49_displayname") : row.GetAttributeValue<string>("abs_name");
+            return NotificationContent.Clip(name);
+        }
+        private Dictionary<string, string> ContentValues(Entity item, Entity source)
+        {
+            var values = new Dictionary<string, string> { ["Title"] = Title(item, source), ["Summary"] = Summary(item) };
+            if (source.LogicalName == "abs_request")
             {
-                send = true, channel = channel, recipient = channel == 1 ? upn : mail,
-                subject = "AI Champions Hub: " + title.Replace("\r", " ").Replace("\n", " "),
-                card = card,
-                email = "<h2>" + WebUtility.HtmlEncode(title) + "</h2><p>" + WebUtility.HtmlEncode(summary) +
-                    "</p><p><a href=\"" + WebUtility.HtmlEncode(url) + "\">Open in Hub</a></p><p>You can change notification preferences in the Hub.</p>"
-            };
+                values["Requester"] = ReferenceName(source, "crd49_champion");
+                values["Category"] = ReferenceName(source, "abs_category");
+                if (values["Category"] == "")
+                {
+                    var category = Choice(source, "crd49_category");
+                    values["Category"] = category == 839560000 ? "License request" : category == 839560001 ? "Connector request" :
+                        category == 839560002 ? "Agent support" : category == 839560003 ? "Department AI support" : "";
+                }
+                values["Status"] = StatusLabel(source);
+                values["Description"] = NotificationContent.Clip(source.GetAttributeValue<string>("crd49_description"));
+                var messageId = item.GetAttributeValue<string>("abs_messageid");
+                // Older queued replies lack a stable message ID; never substitute a later reply.
+                values["Reply"] = string.IsNullOrEmpty(messageId) ? "" :
+                    NotificationContent.Clip(Json.Thread(source.GetAttributeValue<string>("crd49_response"))
+                        .SingleOrDefault(message => message.id == messageId)?.text);
+            }
+            else if (source.LogicalName == "abs_activityclaim")
+            {
+                values["Activity"] = ReferenceName(source, "crd49_activity");
+                values["Claimant"] = ReferenceName(source, "crd49_champion");
+                values["Campaign"] = ReferenceName(source, "crd49_campaign");
+                values["Status"] = StatusLabel(source);
+                var reference = source.GetAttributeValue<EntityReference>("crd49_activity");
+                var activity = reference == null ? null : Get("abs_activity", reference.Id);
+                values["Points"] = activity != null && activity.Contains("crd49_points")
+                    ? activity.GetAttributeValue<int>("crd49_points").ToString(CultureInfo.InvariantCulture) : "";
+            }
+            else if (source.LogicalName == "abs_campaign")
+            {
+                values["CampaignStart"] = NotificationContent.Date(source, "crd49_startdate");
+                values["CampaignEnd"] = NotificationContent.Date(source, "crd49_enddate");
+                values["Description"] = NotificationContent.Clip(source.GetAttributeValue<string>("crd49_description"));
+            }
+            else
+            {
+                values["EventStart"] = NotificationContent.Date(source, "crd49_eventdate");
+                values["EventEnd"] = NotificationContent.Date(source, "abs_eventend");
+                values["Location"] = NotificationContent.Clip(source.GetAttributeValue<string>("crd49_location"));
+                values["Format"] = Choice(source, "crd49_format") == 839560000 ? "Online" : Choice(source, "crd49_format") == 839560001 ? "In person" : "";
+                values["Campaign"] = ReferenceName(source, "crd49_campaign");
+                values["Description"] = NotificationContent.Clip(source.GetAttributeValue<string>("crd49_description"));
+            }
+            return values;
+        }
+        private static string StatusLabel(Entity source)
+        {
+            var status = Choice(source, "crd49_status");
+            if (source.LogicalName == "abs_activityclaim")
+                return status == Open ? "Pending" : status == Approved ? "Approved" : status == Rejected ? "Rejected" : "";
+            return status == Open ? "Open" : status == InReview ? "In review" : status == 839560002 ? "Approved" :
+                status == 839560003 ? "Rejected" : status == 839560004 ? "Fulfilled" : "";
         }
 
         private WorkResult Complete(Guid id, string? outcome)
@@ -533,11 +656,6 @@ namespace Hub.Notifications
                 ["remind-event"] = "An event starts within the next 24 hours."
             };
             return summaries[item.GetAttributeValue<string>("abs_kind")!];
-        }
-        private static string Markdown(string text)
-        {
-            foreach (var token in new[] { "\\", "*", "_", "[", "]", "(", ")", "<", ">", "#", "`" }) text = text.Replace(token, "\\" + token);
-            return text;
         }
         internal static Guid StableId(string text)
         {

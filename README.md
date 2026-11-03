@@ -15,9 +15,10 @@ triaging license/connector requests, reporting to leadership, and self‑brandin
 > **Deploying to a new tenant?** Follow **[`deploy/DEPLOYMENT.md`](./deploy/DEPLOYMENT.md)** — it
 > walks through importing the schema solution and pushing the Code App, end to end.
 
-> **v1.0.7 includes native notifications:** the Notifications screen, private
+> **v1.0.8 includes customizable native notifications:** the Notifications screen, private
 > preferences/history, signed Dataverse plug-in, outbox, and two Power Automate
-> flows are included in both solution packages. Users start opted out.
+> flows, Settings template editor, and structured Teams cards/HTML emails are
+> included in both solution packages. Users start opted out.
 > Configure the target environment's automation connections before enabling flows;
 > see [notification deployment](./deploy/DEPLOYMENT.md#notification-module-source-deployment).
 
@@ -48,6 +49,8 @@ The v1.0.5 event details, multi-day form, and Outlook confirmation screenshots
 records and a simulated mailbox. They do not create tenant events or Outlook appointments.
 The v1.0.7 Notifications screenshot (23) uses the real screen with clearly labeled
 illustrative settings, no tenant connection, and no outbound sends.
+The v1.0.8 template editor screenshot (24) uses the real editor with clearly
+labeled illustrative details; it neither saves tenant settings nor sends messages.
 
 | | |
 |---|---|
@@ -69,6 +72,7 @@ illustrative settings, no tenant connection, and no outbound sends.
 | **Leaderboard** — champions / departments / campaigns ranking | ![Leaderboard](docs/screenshots/06-leaderboard.png) |
 | **Requests** — KPIs, filters, top-right **New Request** for every role, and threaded triage | ![Requests](docs/screenshots/07-requests.png) |
 | **Notifications** — off-by-default channel preferences, pause control, and private delivery history | ![Notification preferences](docs/screenshots/23-notifications.png) |
+| **Notification templates** *(admin)* — per-type wording, selected details, and illustrative Teams/email previews | ![Notification template editor](docs/screenshots/24-notification-templates.png) |
 | **Reports** *(admin)* — executive KPIs, department & type breakdowns, monthly trend, campaign performance (RAG), CSV / PDF export | ![Reports](docs/screenshots/11-reports.png) |
 | **Customize** — per‑user Light/Dark, font family & size with live preview | ![Customize](docs/screenshots/08-customize.png) |
 | **Settings** — program config, application admins & departments | ![Settings](docs/screenshots/09-settings.png) |
@@ -135,6 +139,11 @@ flowchart TB
 
 ## Notification preferences
 
+**Released in v1.0.8:** **Settings → Notification templates**, the rich-card renderer,
+and additive template fields are included in the app and both solution packages.
+When upgrading from v1.0.7, deploy the frontend and backend together; see
+[template upgrades](./deploy/DEPLOYMENT.md#notification-template-upgrades).
+
 The app includes **Notifications** for every signed-in role, including people without
 a Champion profile. Every category starts **Off**; users choose Teams, email, both,
 or neither, and can pause delivery without losing their choices. The screen also
@@ -146,6 +155,17 @@ flows deliver private Teams Adaptive Cards and/or email using administrator-owne
 development connections. Recipients, access and preferences are checked again before
 each send. Notification links open the corresponding Hub record; approvals remain
 inside the authenticated app.
+
+Persistent Program Managers and App Admins can configure wording and selected
+details for all 12 notification types in the template editor. Templates support
+validated placeholders, separate email subjects, card headings, messages and
+button labels, plus illustrative Teams/email previews. Teams cards use structured
+TextBlocks, a FactSet, and OpenUrl actions; emails use an escaped HTML layout.
+No raw HTML/card JSON or in-card approvals are accepted. Event dates are explicitly
+UTC; an optional Join meeting button is included only for a valid HTTPS event URL.
+Description/reply excerpts require explicit selection and are limited to 500
+characters. Exact triggering reply IDs prevent a later reply being substituted.
+Old queued replies without an ID omit their excerpt.
 
 Pending requests/claims untouched for 48 hours, joined campaigns ending within seven
 days, and relevant events starting in the next 24 hours are checked daily at **07:00
@@ -558,8 +578,8 @@ admin”** button:
 
 ### Versioning & upgrades (don't reset existing data)
 
-The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.7`) and is the
-same number carried by the deployable solution (`v1.0.7` in the app → solution version `1.0.7.0`).
+The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.8`) and is the
+same number carried by the deployable solution (`v1.0.8` in the app → solution version `1.0.8.0`).
 
 **To ship an update to a tenant that already has the app — without wiping its data — re-import as an
 upgrade with a *higher* version number.** Dataverse only preserves existing rows when the incoming
@@ -577,15 +597,15 @@ Because the version travels *inside* the exported `.zip`, every shipped change m
 
 | Where | File / command | Format |
 | --- | --- | --- |
-| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.7` |
-| npm package | `package.json` → `version` | `1.0.7` |
-| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.7.0` | `1.0.7.0` |
+| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.8` |
+| npm package | `package.json` → `version` | `1.0.8` |
+| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.8.0` | `1.0.8.0` |
 
 **Release checklist for any future change:**
 
-1. Bump `APP_VERSION` in `src/version.ts` and the package/lockfile versions (e.g. `1.0.6` → `1.0.7`).
+1. Bump `APP_VERSION` in `src/version.ts` and the package/lockfile versions (e.g. `1.0.7` → `1.0.8`).
 2. `npm run build`.
-3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.7.0`.
+3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.8.0`.
 4. Re-push + re-bundle the app: `pac code push --solutionName AIChampionsHubApp`.
 5. Re-export both zips: `pac solution export --name AIChampionsHubApp --path .\deploy\solutions\AIChampionsHubApp_managed.zip --managed true --overwrite` (and again `--managed false` for the unmanaged zip).
 6. Commit the bumped sources **and** the refreshed zips together.

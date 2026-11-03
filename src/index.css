@@ -1485,3 +1485,14 @@ h4 {
   .card { break-inside: avoid; box-shadow: none !important; border: 1px solid #ddd !important; }
   body { background: #fff !important; }
 }
+.notification-template-editor .grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+.notification-template-editor .grid > div { min-width: 0; }
+.notification-template-editor .help-text { overflow-wrap: anywhere; }
+.notification-template-fields { border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.notification-template-fields .row { margin: 8px 0; flex-wrap: nowrap; align-items: flex-start; }
+.notification-template-fields input { flex-shrink: 0; }
+.notification-template-preview { border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-wrap: anywhere; }
+.notification-template-preview dl > div { display: flex; gap: 12px; margin: 8px 0; }
+.notification-template-preview dt { min-width: 110px; font-weight: 600; }
+.notification-template-preview dd { margin: 0; min-width: 0; }
+.notification-template-message { white-space: pre-wrap; }

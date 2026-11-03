@@ -8,6 +8,7 @@ import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { formatDate } from '../lib/format';
 import { BRAND_PRESETS, DEFAULT_BRAND, normalizeBrand, applyBrand } from '../lib/branding';
+import NotificationTemplatesEditor from '../components/NotificationTemplatesEditor';
 
 export default function SettingsScreen() {
   const { settings, appAdmins, champions, departments, requestCategories, isAdmin, isBootstrapAdmin, currentUser, reload } = useAppData();
@@ -332,7 +333,8 @@ export default function SettingsScreen() {
         </div>
       </div>
 
-      <div className="grid grid-2">
+      {!isBootstrapAdmin && <NotificationTemplatesEditor />}
+      <div className="grid grid-2 mt-24">
         <Card title="⚙️ Program Configuration" action={<button className="btn btn-primary btn-sm" disabled={savingCfg} onClick={saveConfig}>{savingCfg ? 'Saving…' : 'Save'}</button>}>
           <div className="list-item">
             <div className="center-col spacer">

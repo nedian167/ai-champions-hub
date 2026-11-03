@@ -70,6 +70,10 @@ function AddColumns([string]$Table, $Columns) {
     }
 }
 
+$flows = @( (Request GET "workflows?`$select=workflowid&`$filter=name eq 'AI Champions Hub - Deliver notifications' or name eq 'AI Champions Hub - Daily reminders'" $null).value )
+if ($flows.Count) {
+    & (Join-Path $PSScriptRoot 'Pause-Notifications.ps1') -Api $Api -Headers $Headers
+}
 $schema = Get-Content -Raw (Join-Path $PSScriptRoot 'schema.json') | ConvertFrom-Json
 foreach ($table in $schema.tables) {
     $existing = Request GET "EntityDefinitions?`$select=LogicalName,OwnershipType,EntitySetName&`$filter=LogicalName eq '$($table.name)'" $null

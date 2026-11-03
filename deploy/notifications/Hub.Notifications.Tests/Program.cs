@@ -1,5 +1,8 @@
 using System.Reflection;
 using System.Runtime.Serialization;
+using System.Runtime.Serialization.Json;
+using System.Text;
+using System.Xml;
 using Hub.Notifications;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Messages;
@@ -7,6 +10,158 @@ using Microsoft.Xrm.Sdk.Query;
 
 var cases = new (string Name, Action Run)[]
 {
+    ("template configurations round-trip for every notification kind", () => {
+        var config = new TemplateConfiguration { version = 1, templates = NotificationContent.Kinds.Keys.Select(NotificationContent.Default).ToList() };
+        Check(NotificationContent.Read(Json.Write(config)).templates!.Count == 12);
+    }),
+    ("every template renders valid structured Adaptive Card JSON with only OpenUrl actions", () => {
+        foreach (var kind in NotificationContent.Kinds.Keys) {
+            var values = NotificationContent.Labels.ToDictionary(pair => pair.Key, pair => "Example " + pair.Key);
+            values["Title"] = "Title with \"quotes\" and <markup>";
+            values["Summary"] = "Example update";
+            var result = NotificationContent.Render(NotificationContent.Default(kind), values, "https://apps.powerapps.com/play/e/test/app/test", null);
+            using var stream = new MemoryStream(Encoding.UTF8.GetBytes(result.card!));
+            using var reader = JsonReaderWriterFactory.CreateJsonReader(stream, XmlDictionaryReaderQuotas.Max);
+            var document = new XmlDocument { XmlResolver = null };
+            document.Load(reader);
+            Check(document.SelectSingleNode("/root/type")!.InnerText == "AdaptiveCard");
+            Check(document.SelectSingleNode("/root/version")!.InnerText == "1.4");
+            Check(document.SelectNodes("/root/body/item[type='FactSet']")!.Count == 1);
+            Check(document.SelectNodes("/root/actions/item[type='Action.OpenUrl']")!.Count == 1);
+            Check(result.email!.Contains("&lt;markup&gt;"));
+        }
+    }),
+    ("non-reviewers cannot write template configuration or commands", () => {
+        var f = new Fixture();
+        Throws(() => f.Worker(f.User).Templates(new Entity("abs_programsettings") { ["abs_notificationtemplates"] = "{\"version\":1,\"templates\":[]}" }));
+        Throws(() => f.Worker(f.Other, "Update").Templates(new Entity("abs_programsettings") { ["abs_notificationtemplatecommand"] = "{}" }));
+        Throws(() => f.Worker(f.User).Templates(new Entity("abs_programsettings") { ["abs_notificationtemplates"] = null }));
+    }),
+    ("persistent reviewers can save templates but stale updates cannot overwrite", () => {
+        var f = new Fixture();
+        var settings = f.Db.Put(new Entity("abs_programsettings", Guid.NewGuid()));
+        var config = Json.Write(new TemplateConfiguration { version = 1, templates = new List<NotificationTemplate> { NotificationContent.Default("request.created") } });
+        var target = new Entity("abs_programsettings", settings.Id) { ["abs_notificationtemplatecommand"] =
+            Json.Write(new TemplateCommand { expected = null, configuration = config }) };
+        f.Worker(f.Admin, "Update").Templates(target);
+        Check((string)target["abs_notificationtemplates"] == config && target["abs_notificationtemplatecommand"] == null);
+        f.Db.Update(target);
+        Throws(() => f.Worker(f.Manager, "Update").Templates(new Entity("abs_programsettings", settings.Id) { ["abs_notificationtemplatecommand"] =
+            Json.Write(new TemplateCommand { expected = null, configuration = config }) }));
+        Throws(() => f.Worker(f.Admin, "Update").Templates(new Entity("abs_programsettings", settings.Id) { ["abs_notificationtemplates"] = null }));
+    }),
+    ("escaped maximum-length templates fit atomic update commands", () => {
+        var f = new Fixture();
+        var templates = NotificationContent.Kinds.Keys.Select(kind => {
+            var template = NotificationContent.Default(kind);
+            template.heading = new string('"', 120);
+            template.subject = new string('"', 200);
+            template.message = new string('"', 1200);
+            template.actionLabel = new string('"', 40);
+            return template;
+        }).ToList();
+        var config = Json.Write(new TemplateConfiguration { version = 1, templates = templates });
+        var settings = f.Db.Put(new Entity("abs_programsettings", Guid.NewGuid()) { ["abs_notificationtemplates"] = config });
+        var command = Json.Write(new TemplateCommand { expected = config, configuration = config });
+        Check(config.Length <= 50000 && command.Length > 110000 && command.Length <= 210000);
+        var target = new Entity("abs_programsettings", settings.Id) { ["abs_notificationtemplatecommand"] = command };
+        f.Worker(f.Admin, "Update").Templates(target);
+        Check((string)target["abs_notificationtemplates"] == config);
+    }),
+    ("disabled program managers cannot edit notification templates", () => {
+        var f = new Fixture();
+        f.Db.Update(new Entity("abs_champion", f.ManagerChampion.Id) { ["crd49_status"] = new OptionSetValue(839560002) });
+        Throws(() => f.Worker(f.Manager).Templates(new Entity("abs_programsettings") { ["abs_notificationtemplates"] = "{\"version\":1,\"templates\":[]}" }));
+    }),
+    ("configured template settings cannot be deleted by a regular user", () => {
+        var f = new Fixture();
+        var settings = f.Db.Put(new Entity("abs_programsettings", Guid.NewGuid()) { ["abs_notificationtemplates"] = "{\"version\":1,\"templates\":[]}" });
+        Throws(() => f.Worker(f.User).TemplateDeletion(settings.Id));
+        f.Worker(f.Admin).TemplateDeletion(settings.Id);
+    }),
+    ("malformed, duplicate and unknown template configuration is rejected", () => {
+        Throws(() => NotificationContent.Read("not JSON"));
+        Throws(() => NotificationContent.Read("{\"version\":2,\"templates\":[]}"));
+        Throws(() => NotificationContent.Read("{\"version\":1,\"templates\":[],\"evil\":true}"));
+        Throws(() => NotificationContent.Read("{\"version\":1,\"version\":1,\"templates\":[]}"));
+        Throws(() => NotificationContent.Read("{\"version\":\"1\",\"templates\":[]}"));
+        Throws(() => NotificationContent.ReadCommand("{\"expected\":null,\"configuration\":\"{}\",\"extra\":false}"));
+        Throws(() => NotificationContent.ReadCommand("{\"expected\":null,\"configuration\":{}}"));
+        var item = NotificationContent.Default("request.created");
+        Throws(() => NotificationContent.Read(Json.Write(new TemplateConfiguration { version = 1, templates = new List<NotificationTemplate> { item, item } })));
+        item.message = "{EventStart}"; Throws(() => NotificationContent.Validate(item));
+        item.message = "{Description}"; Throws(() => NotificationContent.Validate(item));
+        item.fields!.Add("Description"); NotificationContent.Validate(item);
+        item.fields.Add("Description"); Throws(() => NotificationContent.Validate(item));
+    }),
+    ("structured cards and emails include escaped facts and bounded excerpts", () => {
+        var f = new Fixture();
+        f.Db.Update(new Entity("abs_request", f.Request.Id) { ["crd49_description"] = "<script>alert(1)</script>" + new string('x', 700), ["crd49_category"] = new OptionSetValue(839560000) });
+        var template = NotificationContent.Default("request.created");
+        template.fields!.Add("Description");
+        template.message = "New request: {Title}";
+        var config = new TemplateConfiguration { version = 1, templates = new List<NotificationTemplate> { template } };
+        f.Db.Put(new Entity("abs_programsettings", Guid.NewGuid()) { ["abs_notificationtemplates"] = Json.Write(config) });
+        f.Pref(f.Manager, 1); f.CaptureRequest(); f.Prepare();
+        var payload = f.Worker(f.Admin).Work("begin", f.Deliveries[0].Id.ToString(), null);
+        Check(payload.card!.Contains("FactSet") && payload.card.Contains("License request") && payload.card.Contains("Description excerpt"));
+        Check(payload.email!.Contains("&lt;script&gt;") && !payload.email.Contains("<script>"));
+        Check(!payload.card.Contains(new string('x', 501)) && !payload.email.Contains(new string('x', 501)));
+    }),
+    ("default templates omit description and reply excerpts", () => {
+        var f = new Fixture();
+        f.Db.Update(new Entity("abs_request", f.Request.Id) { ["crd49_description"] = "private-secret-description" });
+        f.Pref(f.Manager, 1); f.CaptureRequest(); f.Prepare();
+        var payload = f.Worker(f.Admin).Work("begin", f.Deliveries[0].Id.ToString(), null);
+        Check(!payload.card!.Contains("private-secret-description") && !payload.email!.Contains("private-secret-description"));
+    }),
+    ("reply excerpts use the triggering message, not a later reply", () => {
+        var f = new Fixture();
+        var template = NotificationContent.Default("request.reply.admin");
+        template.fields!.Add("Reply");
+        f.Db.Put(new Entity("abs_programsettings", Guid.NewGuid()) { ["abs_notificationtemplates"] =
+            Json.Write(new TemplateConfiguration { version = 1, templates = new List<NotificationTemplate> { template } }) });
+        f.Pref(f.User, 1);
+        f.Reply(f.Admin, "First exact reply", Guid.NewGuid());
+        f.Reply(f.Admin, "Later different reply", Guid.NewGuid());
+        f.Prepare();
+        var delivery = f.Deliveries.First(d => (string)d["abs_kind"] == "request.reply.admin" &&
+            (string)d["abs_messageid"] == f.Events.First(e => (string)e["abs_kind"] == "request.reply.admin")["abs_messageid"].ToString());
+        var payload = f.Worker(f.Admin).Work("begin", delivery.Id.ToString(), null);
+        Check(payload.card!.Contains("First exact reply") && !payload.card.Contains("Later different reply"));
+        f.Db.Update(new Entity("abs_notificationdelivery", delivery.Id) { ["abs_state"] = 0, ["abs_messageid"] = null });
+        payload = f.Worker(f.Admin).Work("begin", delivery.Id.ToString(), null);
+        Check(!payload.card!.Contains("First exact reply") && !payload.card.Contains("Later different reply"));
+    }),
+    ("event cards show saved UTC endpoints and only explicit safe meeting links", () => {
+        var f = new Fixture();
+        var row = f.Db.Put(new Entity("abs_event", Guid.NewGuid()) {
+            ["abs_name"] = "Workshop", ["crd49_eventdate"] = DateTime.UtcNow.AddHours(2),
+            ["abs_eventend"] = DateTime.UtcNow.AddHours(3), ["crd49_format"] = new OptionSetValue(839560000),
+            ["crd49_location"] = "Online", ["crd49_meetinglink"] = "https://teams.microsoft.com/l/meetup-join/example"
+        });
+        var template = NotificationContent.Default("remind-event");
+        template.includeMeetingLink = true;
+        f.Db.Put(new Entity("abs_programsettings", Guid.NewGuid()) { ["abs_notificationtemplates"] =
+            Json.Write(new TemplateConfiguration { version = 1, templates = new List<NotificationTemplate> { template } }) });
+        f.Pref(f.User, 1); f.Worker(f.Admin).Work("remind-event", row.Id.ToString(), null); f.Prepare();
+        var payload = f.Worker(f.Admin).Work("begin", f.Deliveries[0].Id.ToString(), null);
+        Check(payload.card!.Contains("FactSet") && payload.card.Contains(NotificationContent.Date(row, "crd49_eventdate")) &&
+            payload.card.Contains(NotificationContent.Date(row, "abs_eventend")) &&
+            payload.email!.Contains("Start (UTC)") && payload.email.Contains("End (UTC)"));
+        Check(payload.card.Contains("Join meeting") && payload.email!.Contains("Join meeting"));
+        f.Db.Update(new Entity("abs_notificationdelivery", f.Deliveries[0].Id) { ["abs_state"] = 0 });
+        f.Db.Update(new Entity("abs_event", row.Id) { ["crd49_meetinglink"] = "javascript:alert(1)" });
+        payload = f.Worker(f.Admin).Work("begin", f.Deliveries[0].Id.ToString(), null);
+        Check(!payload.card!.Contains("Join meeting") && !payload.email!.Contains("javascript:"));
+    }),
+    ("invalid stored templates fail before claiming or sending a delivery", () => {
+        var f = new Fixture();
+        f.Db.Put(new Entity("abs_programsettings", Guid.NewGuid()) { ["abs_notificationtemplates"] = "broken" });
+        f.Pref(f.Manager, 1); f.CaptureRequest(); f.Prepare();
+        Throws(() => f.Worker(f.Admin).Work("begin", f.Deliveries[0].Id.ToString(), null));
+        Check((int)f.Deliveries[0]["abs_state"] == Worker.Pending);
+    }),
     ("preferences default off and use authenticated identity", () => {
         var f = new Fixture();
         var target = new Entity("abs_notificationpreference") { ["abs_entraobjectid"] = Guid.NewGuid().ToString() };

@@ -19,6 +19,9 @@ export interface Abs_programsettingsesBase {
   abs_communityname?: string;
   abs_copilotcommunityurl?: string;
   abs_name: string;
+  abs_notificationtemplatecommand?: string;
+  abs_notificationtemplatelock?: string;
+  abs_notificationtemplates?: string;
   abs_programsettingsid: string;
   crd49_activityapprovalrequired: boolean;
   crd49_selfnominationenabled: boolean;

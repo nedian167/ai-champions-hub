@@ -26,6 +26,7 @@
         "abs_source": { "type": "string", "length": 80 },
         "abs_sourceid": { "type": "string", "length": 36 },
         "abs_actorid": { "type": "string", "length": 36 },
+        "abs_messageid": { "type": "string", "length": 36 },
         "abs_expectedstatus": { "type": "integer", "max": 2147483647 },
         "abs_state": { "type": "integer", "max": 2 },
         "abs_page": { "type": "integer", "max": 2147483647 },
@@ -43,6 +44,7 @@
         "abs_source": { "type": "string", "length": 80 },
         "abs_sourceid": { "type": "string", "length": 36 },
         "abs_actorid": { "type": "string", "length": 36 },
+        "abs_messageid": { "type": "string", "length": 36 },
         "abs_expectedstatus": { "type": "integer", "max": 2147483647 },
         "abs_recipientobjectid": { "type": "string", "length": 36 },
         "abs_channel": { "type": "integer", "max": 2 },
@@ -53,6 +55,11 @@
     }
   ],
   "addColumns": {
+    "abs_programsettings": {
+      "abs_notificationtemplates": { "type": "memo", "length": 50000 },
+      "abs_notificationtemplatecommand": { "type": "memo", "length": 210000 },
+      "abs_notificationtemplatelock": { "type": "string", "length": 36 }
+    },
     "abs_request": {
       "abs_replycommand": { "type": "memo", "length": 10000 },
       "abs_notificationlock": { "type": "string", "length": 36 }

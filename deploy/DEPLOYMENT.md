@@ -195,12 +195,12 @@ organizations requiring signed scripts can use the maker UI instead.
 
 Then run `pac code add-data-source -a dataverse -t abs_event` and build. Do not edit
 generated TypeScript manually. The checked-in managed and unmanaged solution
-archives are version 1.0.7.0 and include this column, the notification backend/flows,
+archives are version 1.0.8.0 and include this column, the notification backend/flows,
 and the updated Code App.
 
 ### Outlook connection and rollout
 
-The Outlook module is included in the v1.0.7 app and v1.0.7.0 solution packages.
+The Outlook module is included in the v1.0.8 app and v1.0.8.0 solution packages.
 Import the updated solution or build and push the source above to enable it.
 
 Office 365 Outlook is a **non-shareable, per-user connection**. The developer's
@@ -275,7 +275,7 @@ The Code App is added to the `AIChampionsHubApp` solution using the Power Platfo
 ```powershell
 # From the repo root, authenticated to the SOURCE env:
 npm run build
-pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.7.0
+pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.8.0
 pac code push --solutionName AIChampionsHubApp
 
 # Then re-export both packages:
@@ -289,7 +289,7 @@ Re-run this whenever the app changes so the shipped `.zip` files carry the lates
 
 ## Notification module source deployment
 
-**Release v1.0.7:** both solution ZIPs include Notifications and its backend,
+**Release v1.0.8:** both solution ZIPs include Notifications, customizable templates, and the backend,
 connection references, and two native flows. On import, bind the target environment's
 approved automation connections and verify the app URL/roles before enabling flows.
 The source installer below is for building/upgrading the backend from source; it
@@ -370,7 +370,7 @@ not a ready-made least-privilege production automation role.
    approved, use it only for that invocation; do not change machine policy.
 
 5. In **Solutions > AIChampionsHubApp**, inspect the three tables, request/campaign
-   columns, assembly and nine steps, custom API, both security roles, app URL
+   and template columns, assembly and twelve steps, custom API, both security roles, app URL
    environment variable, three connection references, and two flows. Confirm
    connection authorization and solution membership before exporting. Normal users
    must be unable to read another user's preferences/history or invoke the worker.
@@ -386,6 +386,14 @@ not a ready-made least-privilege production automation role.
 
    Keep generated services/schemas unedited. The background Teams/email connections
    belong to the flows; users' personal Outlook calendar connection is independent.
+
+   `Test-Backend.ps1` defaults to non-delivery verification: metadata, private role
+   grants, solution membership, payload limits, and a rejected native template
+   command whose transaction must leave settings unchanged. It never changes
+   consent, creates business records, or prepares delivery work in this mode.
+   Only pass `ExercisePipeline = $true` in `ActionArguments` for an explicitly
+   authorized development pipeline check; that mode requires all recipients opted
+   out and both flows disabled, and creates/removes a temporary request and reply.
 
 7. Verify an explicitly authorized, isolated Teams/email test before rollout.
    Never opt in users or send bulk/test messages without their permission. After
@@ -428,7 +436,7 @@ not a ready-made least-privilege production automation role.
      -ActionScript .\deploy\notifications\Publish-Notifications.ps1 `
      -ActionArguments @{
        ConfigurationPath = '<PRIVATE_CONFIGURATION_PATH>'
-       ExpectedSolutionVersion = '1.0.7.0'
+       ExpectedSolutionVersion = '1.0.8.0'
      }
    ```
 
@@ -458,6 +466,75 @@ untouched for at least 48 hours go to reviewers; live joined campaigns ending wi
 seven UTC days go to participants; events starting in the next 24 hours go to their
 relevant participants/reviewers (or active Champions for unlinked events). Daily
 source/event IDs prevent duplicate reminder events for the same UTC date.
+
+### Notification template upgrades
+
+The template editor and rich-card renderer ship in **v1.0.8 / solution 1.0.8.0**.
+Upgrades from v1.0.7 add three validation registrations, for twelve total, and
+replace the fixed-message renderer without changing user consent.
+
+Templates reuse the single `abs_programsettings` record rather than adding a new
+table. Schema installation adds `abs_notificationtemplates` (versioned JSON),
+`abs_notificationtemplatecommand` (authenticated update command), and
+`abs_notificationtemplatelock` (transaction lock). Both outbox and delivery tables
+also gain `abs_messageid` for exact reply excerpts. No existing preference, business
+record, or queued delivery is reset.
+
+Before upgrading, disable **both production notification flows** in Power Automate
+and wait for running sends to finish. `Pause-Notifications.ps1` also performs an
+identity-guarded pause through `Connect-Dataverse.ps1`; the schema installer
+automatically pauses existing Hub flows before applying columns. Neither script
+changes user consent or delivery records. Install the additive schema with
+`Install-Schema.ps1`, rebuild using the **original signing key**, and install the
+updated backend with `enableFlows=false`. Run the backend/client checks and
+`Test-Backend.ps1` under its documented development prerequisites. Regenerate
+`abs_programsettings` bindings using
+`pac code add-data-source --apiId dataverse --table abs_programsettings` before the
+frontend release; never hand-edit generated services.
+
+The template facade uses the existing native Program Settings data source.
+Only persistent Program Managers or App Admins may change templates; bootstrap UI
+administration is insufficient. Server-side validation covers Create/Update and
+protects deletion of configured templates. Update commands acquire the settings
+transaction lock, compare the original JSON, validate the new configuration, and
+clear the command. Concurrent edits produce an explicit refresh-required error.
+No worker privilege is granted to the browser or ordinary Hub roles.
+
+In **Settings → Notification templates**, select a notification type, edit the
+heading/email subject/message/button wording, and select permitted detail fields.
+Use supported `{FieldName}` placeholders shown for that type. Save or discard
+changes before switching types. **Restore and save default** removes that override.
+Previews use illustrative values and approximate the layout; they are not a Teams
+renderer and do not send messages. Required text must remain nonempty when rendered.
+
+Default templates include structured facts but exclude description/reply excerpts
+and external meeting actions. Selecting an excerpt explicitly allows up to 500
+characters of source text to leave the authenticated app. Reply excerpts refer to
+the triggering message, not the latest thread entry; pre-upgrade queued replies
+without a message ID omit the excerpt. Other source fields use their current values
+after recipient eligibility is checked. Missing fields are omitted rather than
+invented. Dates are formatted as `yyyy-MM-dd HH:mm UTC`, including the actual saved
+`abs_eventend`; legacy events do not acquire an invented end time. Claim points
+refer to the associated activity's current configured points, not a new award.
+
+Teams output is Adaptive Card 1.4 with sized/wrapped TextBlocks, separated FactSets,
+and OpenUrl buttons. Email uses an escaped HTML table and links. Templates cannot
+introduce arbitrary JSON, HTML or action types; values are inserted once and
+escaped for the destination. An explicitly enabled event Join meeting action only
+uses the source event's valid HTTPS URL. Subject lines are single-line and output
+lengths are bounded. Malformed/ambiguous stored configuration fails explicitly
+before claiming the send; only absent overrides use defaults.
+
+Publish/version/export the frontend and backend together. New-card validation for
+this release covers structured payloads and illustrative previews, not a new
+outbound Teams/email test. Native connection acceptance was verified for v1.0.7;
+verify actual card/email presentation only in an explicitly authorized isolated
+test. Reactivate the production flows after backend and app verification.
+Consent, recipient checks, row-version send claims, and the
+no-automatic-resend/uncertain-delivery rules are unchanged. Do not send test messages
+or republish the existing release solely to inspect an editor preview.
+
+### Delivery monitoring and recovery
 
 Monitor Power Automate run history plus the event/delivery tables. Event states are
 0 pending, 2 leased, 1 complete; delivery states are 0 pending, 1 sending, 2 sent,

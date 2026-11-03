@@ -15,5 +15,6 @@
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Runtime.Serialization" />
     <Compile Include="..\Hub.Notifications\NotificationPlugin.cs" Link="NotificationPlugin.cs" />
+    <Compile Include="..\Hub.Notifications\NotificationContent.cs" Link="NotificationContent.cs" />
   </ItemGroup>
 </Project>

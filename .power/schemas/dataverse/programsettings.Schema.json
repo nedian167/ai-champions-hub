@@ -52,6 +52,30 @@
           "required": true,
           "maxLength": 850
         },
+        "abs_notificationtemplatecommand": {
+          "type": "string",
+          "title": "abs_notificationtemplatecommand",
+          "x-ms-dataverse-attribute": "abs_notificationtemplatecommand",
+          "x-ms-dataverse-type": "MemoType",
+          "x-ms-schema-name": "abs_notificationtemplatecommand",
+          "maxLength": 210000
+        },
+        "abs_notificationtemplatelock": {
+          "type": "string",
+          "title": "abs_notificationtemplatelock",
+          "x-ms-dataverse-attribute": "abs_notificationtemplatelock",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "abs_notificationtemplatelock",
+          "maxLength": 36
+        },
+        "abs_notificationtemplates": {
+          "type": "string",
+          "title": "abs_notificationtemplates",
+          "x-ms-dataverse-attribute": "abs_notificationtemplates",
+          "x-ms-dataverse-type": "MemoType",
+          "x-ms-schema-name": "abs_notificationtemplates",
+          "maxLength": 50000
+        },
         "abs_programsettingsid": {
           "type": "string",
           "title": "Program Settings",
