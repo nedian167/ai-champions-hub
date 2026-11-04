@@ -47,6 +47,7 @@ export type Abs_championsstatuscode = keyof typeof Abs_championsstatuscode;
 
 export interface Abs_championsBase {
   abs_championid: string;
+  abs_normalizeduserid?: string;
   abs_userid: string;
   crd49_appmode?: Abs_championscrd49_appmode;
   "crd49_Department@odata.bind": string;

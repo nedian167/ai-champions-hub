@@ -6,6 +6,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $configuration = Get-Content -Raw -LiteralPath $ConfigurationPath | ConvertFrom-Json
+& (Join-Path (Split-Path -Parent $PSScriptRoot) 'Add-ChampionIdentityKey.ps1') -Api $Api -Headers $Headers -VerifyOnly
 function Request([string]$Method, [string]$Path, $Body) {
     $arguments = @{ Method = $Method; Uri = "$Api/$Path"; Headers = $Headers }
     if ($null -ne $Body) {
@@ -138,6 +139,8 @@ Step 'Campaign update' 'abs_campaign' 'Update' 40 'crd49_status,abs_notification
 Step 'Template settings create' 'abs_programsettings' 'Create' 10 '' ''
 Step 'Template settings update' 'abs_programsettings' 'Update' 20 'abs_notificationtemplates,abs_notificationtemplatecommand' ''
 Step 'Template settings delete' 'abs_programsettings' 'Delete' 10 '' ''
+Step 'Champion identity create' 'abs_champion' 'Create' 20 '' ''
+Step 'Champion identity update' 'abs_champion' 'Update' 20 'abs_userid,abs_normalizeduserid' ''
 
 $roles = @( (Request GET "roles?`$select=roleid,name&`$filter=name eq 'AI Champions Hub Users' or name eq 'AI Champions Hub Admins'" $null).value )
 if (-not $roles.Count) { throw 'The Hub security roles must exist before installing notifications.' }

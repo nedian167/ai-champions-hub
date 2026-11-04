@@ -15,7 +15,7 @@ triaging license/connector requests, reporting to leadership, and self‑brandin
 > **Deploying to a new tenant?** Follow **[`deploy/DEPLOYMENT.md`](./deploy/DEPLOYMENT.md)** — it
 > walks through importing the schema solution and pushing the Code App, end to end.
 
-> **v1.0.8 includes customizable native notifications:** the Notifications screen, private
+> **v1.0.9 includes Champion duplicate prevention and customizable native notifications:** the Notifications screen, private
 > preferences/history, signed Dataverse plug-in, outbox, and two Power Automate
 > flows, Settings template editor, and structured Teams cards/HTML emails are
 > included in both solution packages. Users start opted out.
@@ -136,6 +136,23 @@ flowchart TB
 - The **Office 365 Outlook** connector supports explicit personal-calendar actions from event details, outside the global Hub data load.
 
 ---
+
+## Champion identity
+
+**Released in v1.0.9:** duplicate prevention includes the normalized identity
+column/unique key, signed plug-in guards, regenerated Champion binding and frontend
+in both solution packages. Existing environments also need the safe identity
+backfill before resuming Champion writes; see
+[Champion identity upgrades](./deploy/DEPLOYMENT.md#champion-identity-upgrades).
+
+Champion identity uses the directory User ID (email/UPN), not the display name.
+Add and edit check current Dataverse records, ignoring capitalization and
+surrounding spaces, including pending and inactive profiles. A duplicate selection
+offers **Edit existing Champion** instead of another profile. First-request profile
+creation uses the same checks; ambiguous existing profiles are not chosen silently.
+The backend stamps a normalized identity and an alternate key blocks simultaneous
+duplicate writes. Existing duplicates are reported for explicit review, never
+automatically deleted or merged.
 
 ## Notification preferences
 
@@ -578,8 +595,8 @@ admin”** button:
 
 ### Versioning & upgrades (don't reset existing data)
 
-The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.8`) and is the
-same number carried by the deployable solution (`v1.0.8` in the app → solution version `1.0.8.0`).
+The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.9`) and is the
+same number carried by the deployable solution (`v1.0.9` in the app → solution version `1.0.9.0`).
 
 **To ship an update to a tenant that already has the app — without wiping its data — re-import as an
 upgrade with a *higher* version number.** Dataverse only preserves existing rows when the incoming
@@ -597,15 +614,15 @@ Because the version travels *inside* the exported `.zip`, every shipped change m
 
 | Where | File / command | Format |
 | --- | --- | --- |
-| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.8` |
-| npm package | `package.json` → `version` | `1.0.8` |
-| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.8.0` | `1.0.8.0` |
+| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.9` |
+| npm package | `package.json` → `version` | `1.0.9` |
+| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.9.0` | `1.0.9.0` |
 
 **Release checklist for any future change:**
 
-1. Bump `APP_VERSION` in `src/version.ts` and the package/lockfile versions (e.g. `1.0.7` → `1.0.8`).
+1. Bump `APP_VERSION` in `src/version.ts` and the package/lockfile versions (e.g. `1.0.8` → `1.0.9`).
 2. `npm run build`.
-3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.8.0`.
+3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.9.0`.
 4. Re-push + re-bundle the app: `pac code push --solutionName AIChampionsHubApp`.
 5. Re-export both zips: `pac solution export --name AIChampionsHubApp --path .\deploy\solutions\AIChampionsHubApp_managed.zip --managed true --overwrite` (and again `--managed false` for the unmanaged zip).
 6. Commit the bumped sources **and** the refreshed zips together.
@@ -637,6 +654,10 @@ including permissions, pagination, UTC/DST handling, duplicate prevention, and
 interrupted writes. These also use in-memory doubles and make no Outlook requests.
 Run `npm run test:events` for both event-schedule and Outlook checks, including
 single/multi-day input validation, legacy records, day overlap, and DST-safe editing.
+Run `npm run test:champions` for duplicate creation/editing, identity normalization,
+disabled profiles, failed reads, and overlapping-save checks. The isolated
+`tests\championIdentityKey.test.ps1` checks schema preflight/backfill without a tenant
+connection; run it under your approved PowerShell execution policy.
 
 ---
 

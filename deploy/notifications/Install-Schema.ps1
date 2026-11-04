@@ -70,6 +70,7 @@ function AddColumns([string]$Table, $Columns) {
     }
 }
 
+& (Join-Path (Split-Path -Parent $PSScriptRoot) 'Add-ChampionIdentityKey.ps1') -Api $Api -Headers $Headers
 $flows = @( (Request GET "workflows?`$select=workflowid&`$filter=name eq 'AI Champions Hub - Deliver notifications' or name eq 'AI Champions Hub - Daily reminders'" $null).value )
 if ($flows.Count) {
     & (Join-Path $PSScriptRoot 'Pause-Notifications.ps1') -Api $Api -Headers $Headers

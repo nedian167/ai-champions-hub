@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
 import { ChampionsSvc, bind, type Abs_champions } from '../data/entities';
@@ -10,6 +10,7 @@ import {
   ChampionRole, ChampionStatus, ChampionStatusLabel, optionsOf,
 } from '../lib/enums';
 import { formatDate } from '../lib/format';
+import { normalizeChampionUserId } from '../lib/championIdentity';
 import type { PillColor } from '../components/ui';
 
 function statusColor(s?: number): PillColor {
@@ -31,6 +32,8 @@ export default function ChampionsScreen() {
   const [deptFilter, setDeptFilter] = useState<string>('all');
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
+  const adding = useRef(false);
+  const editingSave = useRef(false);
 
   const [editing, setEditing] = useState<Abs_champions | null>(null);
   const [editForm, setEditForm] = useState({
@@ -45,6 +48,10 @@ export default function ChampionsScreen() {
     displayname: '', userid: '', department: '',
     role: ChampionRole.Champion as number, status: ChampionStatus.Active as number,
   });
+  const matchingChampions = form.userid.trim()
+    ? champions.filter((champion) => normalizeChampionUserId(champion.abs_userid) === normalizeChampionUserId(form.userid))
+    : [];
+  const existingChampion = matchingChampions[0];
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -71,10 +78,16 @@ export default function ChampionsScreen() {
   }
 
   async function addChampion() {
+    if (adding.current) return;
     if (!form.displayname.trim() || !form.userid.trim() || !form.department) {
       toast.error('Name, email and department are required.');
       return;
     }
+    if (existingChampion) {
+      toast.error('This user is already a Champion. Edit or enable their existing profile instead.');
+      return;
+    }
+    adding.current = true;
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
@@ -95,6 +108,7 @@ export default function ChampionsScreen() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to add champion.');
     } finally {
+      adding.current = false;
       setSaving(false);
     }
   }
@@ -111,11 +125,12 @@ export default function ChampionsScreen() {
   }
 
   async function saveEdit() {
-    if (!editing) return;
+    if (!editing || editingSave.current) return;
     if (!editForm.displayname.trim() || !editForm.userid.trim() || !editForm.department) {
       toast.error('Name, email and department are required.');
       return;
     }
+    editingSave.current = true;
     setSavingEdit(true);
     try {
       const payload: Record<string, unknown> = {
@@ -133,6 +148,7 @@ export default function ChampionsScreen() {
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to update champion.');
     } finally {
+      editingSave.current = false;
       setSavingEdit(false);
     }
   }
@@ -255,7 +271,7 @@ export default function ChampionsScreen() {
           footer={
             <>
               <button className="btn btn-secondary" onClick={() => setShowAdd(false)}>Cancel</button>
-              <button className="btn btn-primary" disabled={saving} onClick={addChampion}>{saving ? 'Saving…' : 'Add Champion'}</button>
+              <button className="btn btn-primary" disabled={saving || !!existingChampion} onClick={addChampion}>{saving ? 'Saving…' : 'Add Champion'}</button>
             </>
           }
         >
@@ -272,11 +288,23 @@ export default function ChampionsScreen() {
               }
             />
           </Field>
+          {existingChampion && (
+            <div className="card card-pad mb-16" role="alert">
+              {matchingChampions.length > 1 ? (
+                <p>Multiple Champion profiles already use this User ID. Review their linked records with a program admin before consolidating them. Another profile cannot be added.</p>
+              ) : (
+                <>
+                  <p>{existingChampion.crd49_displayname || existingChampion.abs_userid} already has a Champion profile, including when it is pending or inactive. Edit or enable the existing profile instead.</p>
+                  <button className="btn btn-secondary btn-sm" onClick={() => { setShowAdd(false); openEdit(existingChampion); }}>Edit existing Champion</button>
+                </>
+              )}
+            </div>
+          )}
           <div className="field-row">
             <Field label="Display name">
               <input className="input" value={form.displayname} onChange={(e) => setForm({ ...form, displayname: e.target.value })} placeholder="Ada Lovelace" />
             </Field>
-            <Field label="User ID (email / UPN)">
+            <Field label="User ID (email / UPN)" help="One Champion profile per User ID. Capitalization and surrounding spaces do not create a different user.">
               <input className="input" value={form.userid} onChange={(e) => setForm({ ...form, userid: e.target.value })} placeholder="ada@contoso.com" />
             </Field>
           </div>

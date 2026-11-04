@@ -10,6 +10,81 @@ using Microsoft.Xrm.Sdk.Query;
 
 var cases = new (string Name, Action Run)[]
 {
+    ("Champion identities are normalized on create and update", () => {
+        var f = new Fixture();
+        foreach (var message in new[] { "Create", "Update" }) {
+            var target = new Entity("abs_champion", Guid.NewGuid()) { ["abs_userid"] = "  Lisa.Taylor@example.test  " };
+            f.Worker(f.Admin, message).ChampionIdentity(target);
+            Check((string)target["abs_userid"] == "lisa.taylor@example.test");
+            Check((string)target["abs_normalizeduserid"] == "lisa.taylor@example.test");
+        }
+    }),
+    ("Champion creation rejects existing users regardless of profile status or letter case", () => {
+        foreach (var status in new[] { 839560000, 839560001, 839560002 }) {
+            var f = new Fixture();
+            f.Db.Update(new Entity("abs_champion", f.UserChampion.Id) {
+                ["abs_userid"] = "LiSa.Taylor@example.test", ["crd49_status"] = new OptionSetValue(status), ["statecode"] = new OptionSetValue(1)
+            });
+            Throws(() => f.Worker(f.Admin).ChampionIdentity(new Entity("abs_champion", Guid.NewGuid()) { ["abs_userid"] = " LISA.TAYLOR@example.test " }));
+        }
+    }),
+    ("Champion edits exclude their own row but cannot take another identity", () => {
+        var f = new Fixture();
+        var own = new Entity("abs_champion", f.UserChampion.Id) { ["abs_userid"] = " USER@example.test " };
+        f.Worker(f.Admin, "Update").ChampionIdentity(own);
+        Check((string)own["abs_userid"] == "user@example.test");
+        Throws(() => f.Worker(f.Admin, "Update").ChampionIdentity(new Entity("abs_champion", f.UserChampion.Id) { ["abs_userid"] = "manager@example.test" }));
+    }),
+    ("Champion updates without an identity leave existing fields alone", () => {
+        var f = new Fixture();
+        var target = new Entity("abs_champion", f.UserChampion.Id) { ["crd49_status"] = new OptionSetValue(839560002) };
+        f.Worker(f.Admin, "Update").ChampionIdentity(target);
+        Check(!target.Contains("abs_userid"));
+    }),
+    ("Champion writes reject missing or blank User IDs", () => {
+        var f = new Fixture();
+        Throws(() => f.Worker(f.Admin).ChampionIdentity(new Entity("abs_champion")));
+        Throws(() => f.Worker(f.Admin, "Update").ChampionIdentity(new Entity("abs_champion", f.UserChampion.Id) { ["abs_userid"] = "  " }));
+    }),
+    ("different people can share a Champion display name", () => {
+        var f = new Fixture();
+        f.Db.Update(new Entity("abs_champion", f.UserChampion.Id) { ["crd49_displayname"] = "Lisa Taylor" });
+        var target = new Entity("abs_champion", Guid.NewGuid()) { ["abs_userid"] = "another.lisa@example.test", ["crd49_displayname"] = "Lisa Taylor" };
+        f.Worker(f.Admin).ChampionIdentity(target);
+        Check((string)target["abs_userid"] == "another.lisa@example.test");
+    }),
+    ("legacy whitespace identities are protected by their backfilled key", () => {
+        var f = new Fixture();
+        f.Db.Update(new Entity("abs_champion", f.UserChampion.Id) {
+            ["abs_userid"] = " Lisa.Taylor@example.test ", ["abs_normalizeduserid"] = "lisa.taylor@example.test"
+        });
+        Throws(() => f.Worker(f.Admin).ChampionIdentity(new Entity("abs_champion") { ["abs_userid"] = "LISA.TAYLOR@example.test" }));
+    }),
+    ("clients cannot forge or clear the normalized Champion identity", () => {
+        var f = new Fixture();
+        var target = new Entity("abs_champion", f.UserChampion.Id) { ["abs_normalizeduserid"] = null };
+        f.Worker(f.Admin, "Update").ChampionIdentity(target);
+        Check((string)target["abs_normalizeduserid"] == "user@example.test");
+        var created = new Entity("abs_champion") { ["abs_userid"] = "new@example.test", ["abs_normalizeduserid"] = "manager@example.test" };
+        f.Worker(f.Admin).ChampionIdentity(created);
+        Check((string)created["abs_normalizeduserid"] == "new@example.test");
+    }),
+    ("oversized Champion identities are rejected without truncating them", () => {
+        var f = new Fixture();
+        Throws(() => f.Worker(f.Admin).ChampionIdentity(new Entity("abs_champion") { ["abs_userid"] = new string('x', 321) }));
+    }),
+    ("normalized identities preserve reviewer and requester authorization for legacy profiles", () => {
+        var f = new Fixture();
+        f.Db.Update(new Entity("abs_champion", f.ManagerChampion.Id) {
+            ["abs_userid"] = " MANAGER@example.test ", ["abs_normalizeduserid"] = "manager@example.test"
+        });
+        f.Worker(f.Manager).Templates(new Entity("abs_programsettings") { ["abs_notificationtemplates"] = "{\"version\":1,\"templates\":[]}" });
+        f.Db.Update(new Entity("abs_champion", f.UserChampion.Id) {
+            ["abs_userid"] = " USER@example.test ", ["abs_normalizeduserid"] = "user@example.test"
+        });
+        f.Reply(f.User, "My reply");
+        Check(f.Events.Count == 1);
+    }),
     ("template configurations round-trip for every notification kind", () => {
         var config = new TemplateConfiguration { version = 1, templates = NotificationContent.Kinds.Keys.Select(NotificationContent.Default).ToList() };
         Check(NotificationContent.Read(Json.Write(config)).templates!.Count == 12);
@@ -574,6 +649,7 @@ sealed class FakeService : IOrganizationService
             var equal = Equals(left, right) || left is string a && right is string b && a.Equals(b, StringComparison.OrdinalIgnoreCase);
             return condition.Operator switch {
                 ConditionOperator.Equal => equal,
+                ConditionOperator.NotEqual => !equal,
                 ConditionOperator.GreaterThan => left is IComparable gt && gt.CompareTo(right) > 0,
                 ConditionOperator.LessThan => left is IComparable lt && lt.CompareTo(right) < 0,
                 _ => throw new NotSupportedException(condition.Operator.ToString())

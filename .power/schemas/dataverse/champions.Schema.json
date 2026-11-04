@@ -20,6 +20,14 @@
           "required": true,
           "x-ms-keyType": "primary"
         },
+        "abs_normalizeduserid": {
+          "type": "string",
+          "title": "Normalized Champion User ID",
+          "x-ms-dataverse-attribute": "abs_normalizeduserid",
+          "x-ms-dataverse-type": "StringType",
+          "x-ms-schema-name": "abs_normalizeduserid",
+          "maxLength": 320
+        },
         "abs_userid": {
           "type": "string",
           "title": "User ID",

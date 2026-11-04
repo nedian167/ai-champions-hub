@@ -37,7 +37,10 @@ namespace Hub.Notifications
                 return;
             }
             if (!context.InputParameters.Contains("Target") || !(context.InputParameters["Target"] is Entity target)) return;
-            if (target.LogicalName == "abs_programsettings" &&
+            if (target.LogicalName == "abs_champion" && context.Stage == 20 &&
+                (context.MessageName == "Create" || context.MessageName == "Update"))
+                worker.ChampionIdentity(target);
+            else if (target.LogicalName == "abs_programsettings" &&
                 (context.MessageName == "Create" && context.Stage == 10 || context.MessageName == "Update" && context.Stage == 20))
                 worker.Templates(target);
             else if (target.LogicalName == "abs_notificationpreference" &&
@@ -64,6 +67,26 @@ namespace Hub.Notifications
             this.service = service;
             this.context = context;
             this.trace = trace;
+        }
+
+        internal void ChampionIdentity(Entity target)
+        {
+            if (context.MessageName == "Update" && !target.Contains("abs_userid") && !target.Contains("abs_normalizeduserid")) return;
+            var raw = target.Contains("abs_userid") ? target.GetAttributeValue<string>("abs_userid")
+                : context.MessageName == "Update" ? Get("abs_champion", target.Id)?.GetAttributeValue<string>("abs_userid") : null;
+            var userId = (raw ?? "").Trim().ToLowerInvariant();
+            if (userId.Length == 0) throw new InvalidPluginExecutionException("A Champion User ID (email / UPN) is required.");
+            if (userId.Length > 320) throw new InvalidPluginExecutionException("A Champion User ID must be no more than 320 characters.");
+            var query = new QueryExpression("abs_champion") { ColumnSet = new ColumnSet("abs_championid"), TopCount = 1 };
+            var identities = new FilterExpression(LogicalOperator.Or);
+            identities.AddCondition("abs_userid", ConditionOperator.Equal, userId);
+            identities.AddCondition("abs_normalizeduserid", ConditionOperator.Equal, userId);
+            query.Criteria.AddFilter(identities);
+            if (target.Id != Guid.Empty) query.Criteria.AddCondition("abs_championid", ConditionOperator.NotEqual, target.Id);
+            if (service.RetrieveMultiple(query).Entities.Count != 0)
+                throw new InvalidPluginExecutionException("A Champion with this User ID already exists. Edit or enable the existing profile instead of adding another.");
+            target["abs_userid"] = userId;
+            target["abs_normalizeduserid"] = userId;
         }
 
         private bool CanEditTemplates(Entity actor)
@@ -527,12 +550,21 @@ namespace Hub.Notifications
 
         private bool IsRequester(Entity request, Entity user) => ChampionMatches(request.GetAttributeValue<EntityReference>("crd49_champion"), user);
         private bool IsClaimant(Entity claim, Entity user) => ChampionMatches(claim.GetAttributeValue<EntityReference>("crd49_champion"), user);
-        private bool ChampionMatches(EntityReference? reference, Entity user) =>
-            reference != null && string.Equals(Get("abs_champion", reference.Id)?.GetAttributeValue<string>("abs_userid"),
-                user.GetAttributeValue<string>("domainname"), StringComparison.OrdinalIgnoreCase);
+        private bool ChampionMatches(EntityReference? reference, Entity user)
+        {
+            if (reference == null) return false;
+            var userId = user.GetAttributeValue<string>("domainname")?.Trim();
+            return !string.IsNullOrEmpty(userId) && string.Equals(
+                Get("abs_champion", reference.Id)?.GetAttributeValue<string>("abs_userid")?.Trim(),
+                userId, StringComparison.OrdinalIgnoreCase);
+        }
         private Entity? Champion(Entity user)
         {
-            var query = Query("abs_champion", "abs_userid", user.GetAttributeValue<string>("domainname") ?? "");
+            var userId = (user.GetAttributeValue<string>("domainname") ?? "").Trim().ToLowerInvariant();
+            if (userId.Length == 0) return null;
+            var query = Query("abs_champion", "abs_userid", userId);
+            query.Criteria.FilterOperator = LogicalOperator.Or;
+            query.Criteria.AddCondition("abs_normalizeduserid", ConditionOperator.Equal, userId);
             query.TopCount = 2;
             var rows = service.RetrieveMultiple(query).Entities;
             if (rows.Count > 1) throw new InvalidPluginExecutionException("Multiple Champion profiles match a notification recipient.");

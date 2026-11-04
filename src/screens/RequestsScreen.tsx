@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppData } from '../context/AppDataContext';
 import { ChampionsSvc, RequestsSvc, bind } from '../data/entities';
+import { findChampionProfiles } from '../data/champions';
 import { Card, KpiCard, Pill, EmptyState, SearchInput, Field } from '../components/ui';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
@@ -10,6 +11,7 @@ import {
 } from '../lib/enums';
 import { formatDate } from '../lib/format';
 import { parseThread, lastMessage } from '../lib/requestThread';
+import { normalizeChampionUserId } from '../lib/championIdentity';
 import type { PillColor } from '../components/ui';
 import type { Abs_champions, Abs_requests } from '../data/entities';
 
@@ -53,11 +55,11 @@ export default function RequestsScreen() {
     return RequestCategoryLabel[r.crd49_category ?? -1] ?? '—';
   };
 
-  const myUpn = (currentUser?.userPrincipalName ?? '').toLowerCase();
+  const myUpn = normalizeChampionUserId(currentUser?.userPrincipalName);
   const isOwner = (r: Abs_requests) => {
     if (requesterChampion && r._crd49_champion_value === requesterChampion.abs_championid) return true;
     const champ = championById.get(r._crd49_champion_value ?? '');
-    return !!myUpn && (champ?.abs_userid ?? '').toLowerCase() === myUpn;
+    return !!myUpn && normalizeChampionUserId(champ?.abs_userid) === myUpn;
   };
 
   // Admins triage every request; a champion only sees and manages their own.
@@ -124,18 +126,12 @@ export default function RequestsScreen() {
     try {
       let requesterId = requesterChampion?.abs_championid;
       if (!requesterId) {
-        const upn = currentUser!.userPrincipalName.trim();
-        const existing = await ChampionsSvc.getAll({
-          filter: `abs_userid eq '${upn.replace(/'/g, "''")}'`,
-          top: 2,
-        });
-        if (!existing.success || !existing.data) {
-          throw new Error(existing.error?.message ?? 'Could not check your requester profile.');
-        }
-        if (existing.data.length > 1) {
+        const upn = normalizeChampionUserId(currentUser!.userPrincipalName);
+        const existing = await findChampionProfiles(upn);
+        if (existing.length > 1) {
           throw new Error('Multiple Champion profiles match your account. Ask a program admin to resolve them before submitting.');
         }
-        let champion = existing.data[0];
+        let champion = existing[0];
         if (champion?.crd49_status === ChampionStatus.Inactive && !isAdmin) {
           throw new Error('Your Champion profile is disabled. Contact a program admin before submitting a request.');
         }

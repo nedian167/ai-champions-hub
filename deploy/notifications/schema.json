@@ -55,6 +55,9 @@
     }
   ],
   "addColumns": {
+    "abs_champion": {
+      "abs_normalizeduserid": { "type": "string", "length": 320 }
+    },
     "abs_programsettings": {
       "abs_notificationtemplates": { "type": "memo", "length": 50000 },
       "abs_notificationtemplatecommand": { "type": "memo", "length": 210000 },

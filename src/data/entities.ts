@@ -3,7 +3,7 @@
  * from here so the generated file names stay in one place. Also defines the OData
  * entity-set paths used for `@odata.bind` lookups and small typed create inputs.
  */
-import { Abs_championsService } from '../generated/services/Abs_championsService';
+import { ChampionsService } from './champions';
 import { Abs_departmentsService } from '../generated/services/Abs_departmentsService';
 import { Abs_campaignsService } from '../generated/services/Abs_campaignsService';
 import { Abs_campaigndepartmentsService } from '../generated/services/Abs_campaigndepartmentsService';
@@ -20,7 +20,7 @@ import { Abs_appadminsService } from '../generated/services/Abs_appadminsService
 import { Office365UsersService } from '../generated/services/Office365UsersService';
 import { Office365OutlookService } from '../generated/services/Office365OutlookService';
 
-export const ChampionsSvc = Abs_championsService;
+export const ChampionsSvc = ChampionsService;
 export const DepartmentsSvc = Abs_departmentsService;
 export const CampaignsSvc = Abs_campaignsService;
 export const CampaignDepartmentsSvc = Abs_campaigndepartmentsService;

@@ -1,9 +1,10 @@
 {
   "name": "vite",
   "private": true,
-  "version": "1.0.8",
+  "version": "1.0.9",
   "type": "module",
   "scripts": {
+    "test:champions": "node --test tests/champions.test.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

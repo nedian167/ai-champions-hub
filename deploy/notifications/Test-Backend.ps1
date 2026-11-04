@@ -5,6 +5,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+& (Join-Path (Split-Path -Parent $PSScriptRoot) 'Add-ChampionIdentityKey.ps1') -Api $Api -Headers $Headers -VerifyOnly
 function Request([string]$Method, [string]$Path, $Body) {
     $requestHeaders = $Headers.Clone()
     $requestHeaders.Prefer = 'odata.include-annotations="*"'
@@ -82,14 +83,44 @@ if ($preferences.Count -or $ExercisePipeline) {
     }
 }
 $steps = @( (Request GET "sdkmessageprocessingsteps?`$select=sdkmessageprocessingstepid,name,stage,mode&`$filter=startswith(name,'AI Champions Hub Notifications - ')" $null).value )
-Check ($steps.Count -eq 12 -and @($steps | Where-Object mode -ne 0).Count -eq 0) 'All twelve synchronous notification plug-in registrations exist.'
+Check ($steps.Count -eq 14 -and @($steps | Where-Object mode -ne 0).Count -eq 0) 'All fourteen synchronous Hub plug-in registrations exist.'
 foreach ($registration in @(
     @{ Name = 'Template settings create'; Stage = 10 },
     @{ Name = 'Template settings update'; Stage = 20 },
-    @{ Name = 'Template settings delete'; Stage = 10 }
+    @{ Name = 'Template settings delete'; Stage = 10 },
+    @{ Name = 'Champion identity create'; Stage = 20 },
+    @{ Name = 'Champion identity update'; Stage = 20 }
 )) {
     $step = @($steps | Where-Object name -eq "AI Champions Hub Notifications - $($registration.Name)")
     Check ($step.Count -eq 1 -and $step[0].stage -eq $registration.Stage) "$($registration.Name) runs at its required validation stage."
+}
+$champions = @( (Request GET 'abs_champions?$select=abs_championid,abs_userid,abs_normalizeduserid&$top=2' $null).value )
+if ($champions.Count -eq 2) {
+    $existingIdentity = [string]$champions[1].abs_normalizeduserid
+    Check ([bool]$existingIdentity -and $existingIdentity -ne $champions[0].abs_normalizeduserid) 'Native duplicate checks have two distinct, indexed Champion identities.'
+    $duplicate = @{
+        abs_userid = " $($existingIdentity.ToUpperInvariant()) "
+        # The existing indexed value also prevents a write if the plug-in is missing.
+        abs_normalizeduserid = $existingIdentity
+    }
+    foreach ($attempt in @(
+        @{ Method = 'POST'; Path = 'abs_champions'; Name = 'Create' },
+        @{ Method = 'PATCH'; Path = "abs_champions($($champions[0].abs_championid))"; Name = 'Update' }
+    )) {
+        try {
+            Request $attempt.Method $attempt.Path $duplicate | Out-Null
+            throw 'The server unexpectedly accepted a duplicate Champion identity.'
+        } catch {
+            if (-not $_.ErrorDetails.Message -or $_.ErrorDetails.Message -notmatch 'A Champion with this User ID already exists') { throw }
+            Write-Output "PASS Native Champion $($attempt.Name) rejects a normalized duplicate without changing a profile."
+        }
+    }
+    foreach ($champion in $champions) {
+        $afterChampion = Request GET "abs_champions($($champion.abs_championid))?`$select=abs_userid,abs_normalizeduserid" $null
+        Check ($afterChampion.abs_userid -ceq $champion.abs_userid -and $afterChampion.abs_normalizeduserid -ceq $champion.abs_normalizeduserid) 'Rejected duplicate writes preserve the existing Champion identity.'
+    }
+} else {
+    Write-Output 'Native duplicate-write checks were not exercised: two existing Champion profiles are required. No test profiles were created.'
 }
 foreach ($column in @('abs_notificationtemplates', 'abs_notificationtemplatecommand')) {
     $spec = $schema.addColumns.abs_programsettings.$column

@@ -195,12 +195,12 @@ organizations requiring signed scripts can use the maker UI instead.
 
 Then run `pac code add-data-source -a dataverse -t abs_event` and build. Do not edit
 generated TypeScript manually. The checked-in managed and unmanaged solution
-archives are version 1.0.8.0 and include this column, the notification backend/flows,
-and the updated Code App.
+archives are version 1.0.9.0 and include this column, the notification backend/flows,
+Champion identity protection, and the updated Code App.
 
 ### Outlook connection and rollout
 
-The Outlook module is included in the v1.0.8 app and v1.0.8.0 solution packages.
+The Outlook module is included in the v1.0.9 app and v1.0.9.0 solution packages.
 Import the updated solution or build and push the source above to enable it.
 
 Office 365 Outlook is a **non-shareable, per-user connection**. The developer's
@@ -275,7 +275,7 @@ The Code App is added to the `AIChampionsHubApp` solution using the Power Platfo
 ```powershell
 # From the repo root, authenticated to the SOURCE env:
 npm run build
-pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.8.0
+pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.9.0
 pac code push --solutionName AIChampionsHubApp
 
 # Then re-export both packages:
@@ -287,9 +287,63 @@ Re-run this whenever the app changes so the shipped `.zip` files carry the lates
 
 ---
 
+## Champion identity upgrades
+
+**Released in v1.0.9 / solution 1.0.9.0:** both ZIPs contain this duplicate-prevention
+upgrade. Do not publish this frontend alone against the old schema. The release
+adds `abs_champion.abs_normalizeduserid`, the alternate key
+`abs_ChampionNormalizedUserId`, and two synchronous identity-validation steps,
+bringing the shared assembly's registrations from twelve to fourteen.
+
+Importing a solution does not backfill existing Champion records. For an existing
+target environment, keep Champion writes paused and run the identity migration
+below even when upgrading through solution import. It verifies all identities and
+fills the technical column without changing original User IDs or business links.
+A fresh environment with no Champion records needs no backfill; the imported
+plug-in derives the identity for each newly created profile.
+
+The original User ID column permits 850 characters and is too wide for a Dataverse
+900-byte alternate key. The new technical column is limited to 320 characters
+(640 Unicode bytes). Both the client and plug-in reject longer identities rather
+than truncate them. The plug-in derives the key from the trimmed, lowercase User
+ID on Create and identity Update, and prevents direct writes from forging or
+clearing it. The unique index is the concurrent-write safeguard; a browser lookup
+alone is insufficient.
+
+1. Use a maintenance window and pause Champion creation/identity changes, including
+   imports and other integrations. `Add-ChampionIdentityKey.ps1` first reads every
+   page and groups normalized IDs across all profile statuses. Duplicates or invalid
+   IDs stop installation before any metadata or data writes. Review the reported
+   records and linked requests, claims, participation and points before any
+   explicitly approved consolidation. Simply disabling a duplicate does not clear
+   its identity; do not delete profiles blindly. No cleanup is automated.
+2. Invoke `notifications\Connect-Dataverse.ps1` with the approved target and
+   `ActionScript = .\deploy\notifications\Install-Schema.ps1`, as below. The schema
+   installer creates the technical column, backfills only that column using row
+   versions, and waits for the unique index to become **Active**. Original User IDs,
+   record IDs, roles, points and relationships are preserved. Legacy surrounding
+   whitespace/capitalization is represented canonically in the technical key.
+   Concurrent changes or index failures stop the upgrade explicitly; a partially
+   completed technical backfill can be rerun safely.
+3. Rebuild the signed plug-in using the original key, then run `Install-Backend.ps1`
+   and `Test-Backend.ps1`. Both require the normalized identities and unique index
+   to be ready; fourteen synchronous registrations must be present. The two new
+   steps run on Champion Create/Update at stage 20, with Update filtering on
+   `abs_userid,abs_normalizeduserid`. This closes the direct SDK/import path as well
+   as the app forms.
+   When two profiles already exist, verification exercises rejected native Create
+   and Update attempts using an existing indexed identity, then confirms both
+   profiles are unchanged. The unique index also prevents these attempts from
+   persisting if a plug-in registration is missing. No test profiles are created.
+4. Regenerate `pac code add-data-source --apiId dataverse --table abs_champion`,
+   build, bump the release version, publish and export both solution packages
+   together. Confirm the technical column/key and two identity steps are exported.
+   Restore the production flows only after coordinated verification, without
+   changing anyone's notification consent.
+
 ## Notification module source deployment
 
-**Release v1.0.8:** both solution ZIPs include Notifications, customizable templates, and the backend,
+**Release v1.0.9:** both solution ZIPs include Notifications, customizable templates, and the backend,
 connection references, and two native flows. On import, bind the target environment's
 approved automation connections and verify the app URL/roles before enabling flows.
 The source installer below is for building/upgrading the backend from source; it
@@ -370,7 +424,8 @@ not a ready-made least-privilege production automation role.
    approved, use it only for that invocation; do not change machine policy.
 
 5. In **Solutions > AIChampionsHubApp**, inspect the three tables, request/campaign
-   and template columns, assembly and twelve steps, custom API, both security roles, app URL
+   and template columns, Champion identity column/key, assembly and fourteen steps,
+   custom API, both security roles, app URL
    environment variable, three connection references, and two flows. Confirm
    connection authorization and solution membership before exporting. Normal users
    must be unable to read another user's preferences/history or invoke the worker.
@@ -436,7 +491,7 @@ not a ready-made least-privilege production automation role.
      -ActionScript .\deploy\notifications\Publish-Notifications.ps1 `
      -ActionArguments @{
        ConfigurationPath = '<PRIVATE_CONFIGURATION_PATH>'
-       ExpectedSolutionVersion = '1.0.8.0'
+       ExpectedSolutionVersion = '1.0.9.0'
      }
    ```
 

@@ -12,6 +12,7 @@ import {
 } from '../data/entities';
 import { ChampionRole, ClaimStatus } from '../lib/enums';
 import { notificationLaunch } from '../lib/notifications';
+import { normalizeChampionUserId } from '../lib/championIdentity';
 
 export interface CurrentUser {
   fullName: string;
@@ -227,10 +228,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const currentChampion = useMemo(() => {
-    if (!currentUser?.userPrincipalName) return null;
-    const upn = currentUser.userPrincipalName.toLowerCase();
+    const upn = normalizeChampionUserId(currentUser?.userPrincipalName);
+    if (!upn) return null;
     return (
-      champions.find((c) => (c.abs_userid ?? '').toLowerCase() === upn) ??
+      champions.find((c) => normalizeChampionUserId(c.abs_userid) === upn) ??
       null
     );
   }, [champions, currentUser]);
