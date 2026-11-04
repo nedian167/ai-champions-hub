@@ -15,9 +15,9 @@ triaging license/connector requests, reporting to leadership, and self‑brandin
 > **Deploying to a new tenant?** Follow **[`deploy/DEPLOYMENT.md`](./deploy/DEPLOYMENT.md)** — it
 > walks through importing the schema solution and pushing the Code App, end to end.
 
-> **v1.0.9 includes Champion duplicate prevention and customizable native notifications:** the Notifications screen, private
+> **v1.0.10 includes Champion duplicate prevention and customizable native notifications:** the Notifications screen, private
 > preferences/history, signed Dataverse plug-in, outbox, and two Power Automate
-> flows, Settings template editor, and structured Teams cards/HTML emails are
+> flows, template editor on Notifications, and structured Teams cards/HTML emails are
 > included in both solution packages. Users start opted out.
 > Configure the target environment's automation connections before enabling flows;
 > see [notification deployment](./deploy/DEPLOYMENT.md#notification-module-source-deployment).
@@ -156,7 +156,12 @@ automatically deleted or merged.
 
 ## Notification preferences
 
-**Released in v1.0.8:** **Settings → Notification templates**, the rich-card renderer,
+**Released in v1.0.10:** **Notification templates** is on the **Notifications** page,
+below personal preferences and delivery activity, for Program Managers and App
+Admins only. Settings no longer contains the editor. Saved templates and personal
+notification preferences are unchanged; no backend migration is needed for this move.
+
+**Released in v1.0.8:** the template editor, rich-card renderer,
 and additive template fields are included in the app and both solution packages.
 When upgrading from v1.0.7, deploy the frontend and backend together; see
 [template upgrades](./deploy/DEPLOYMENT.md#notification-template-upgrades).
@@ -595,8 +600,8 @@ admin”** button:
 
 ### Versioning & upgrades (don't reset existing data)
 
-The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.9`) and is the
-same number carried by the deployable solution (`v1.0.9` in the app → solution version `1.0.9.0`).
+The current version is shown at the **bottom of the left navigation panel** (e.g. `v1.0.10`) and is the
+same number carried by the deployable solution (`v1.0.10` in the app → solution version `1.0.10.0`).
 
 **To ship an update to a tenant that already has the app — without wiping its data — re-import as an
 upgrade with a *higher* version number.** Dataverse only preserves existing rows when the incoming
@@ -614,15 +619,15 @@ Because the version travels *inside* the exported `.zip`, every shipped change m
 
 | Where | File / command | Format |
 | --- | --- | --- |
-| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.9` |
-| npm package | `package.json` → `version` | `1.0.9` |
-| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.9.0` | `1.0.9.0` |
+| App UI label | `src/version.ts` → `APP_VERSION` | `1.0.10` |
+| npm package | `package.json` → `version` | `1.0.10` |
+| Dataverse solution | `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.10.0` | `1.0.10.0` |
 
 **Release checklist for any future change:**
 
-1. Bump `APP_VERSION` in `src/version.ts` and the package/lockfile versions (e.g. `1.0.8` → `1.0.9`).
+1. Bump `APP_VERSION` in `src/version.ts` and the package/lockfile versions (e.g. `1.0.9` → `1.0.10`).
 2. `npm run build`.
-3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.9.0`.
+3. Set the online solution version: `pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.10.0`.
 4. Re-push + re-bundle the app: `pac code push --solutionName AIChampionsHubApp`.
 5. Re-export both zips: `pac solution export --name AIChampionsHubApp --path .\deploy\solutions\AIChampionsHubApp_managed.zip --managed true --overwrite` (and again `--managed false` for the unmanaged zip).
 6. Commit the bumped sources **and** the refreshed zips together.

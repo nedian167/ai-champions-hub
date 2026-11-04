@@ -195,12 +195,12 @@ organizations requiring signed scripts can use the maker UI instead.
 
 Then run `pac code add-data-source -a dataverse -t abs_event` and build. Do not edit
 generated TypeScript manually. The checked-in managed and unmanaged solution
-archives are version 1.0.9.0 and include this column, the notification backend/flows,
+archives are version 1.0.10.0 and include this column, the notification backend/flows,
 Champion identity protection, and the updated Code App.
 
 ### Outlook connection and rollout
 
-The Outlook module is included in the v1.0.9 app and v1.0.9.0 solution packages.
+The Outlook module is included in the v1.0.10 app and v1.0.10.0 solution packages.
 Import the updated solution or build and push the source above to enable it.
 
 Office 365 Outlook is a **non-shareable, per-user connection**. The developer's
@@ -275,7 +275,7 @@ The Code App is added to the `AIChampionsHubApp` solution using the Power Platfo
 ```powershell
 # From the repo root, authenticated to the SOURCE env:
 npm run build
-pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.9.0
+pac solution online-version --solution-name AIChampionsHubApp --solution-version 1.0.10.0
 pac code push --solutionName AIChampionsHubApp
 
 # Then re-export both packages:
@@ -343,7 +343,7 @@ alone is insufficient.
 
 ## Notification module source deployment
 
-**Release v1.0.9:** both solution ZIPs include Notifications, customizable templates, and the backend,
+**Release v1.0.10:** both solution ZIPs include Notifications, customizable templates, and the backend,
 connection references, and two native flows. On import, bind the target environment's
 approved automation connections and verify the app URL/roles before enabling flows.
 The source installer below is for building/upgrading the backend from source; it
@@ -491,7 +491,7 @@ not a ready-made least-privilege production automation role.
      -ActionScript .\deploy\notifications\Publish-Notifications.ps1 `
      -ActionArguments @{
        ConfigurationPath = '<PRIVATE_CONFIGURATION_PATH>'
-       ExpectedSolutionVersion = '1.0.9.0'
+       ExpectedSolutionVersion = '1.0.10.0'
      }
    ```
 
@@ -555,7 +555,8 @@ transaction lock, compare the original JSON, validate the new configuration, and
 clear the command. Concurrent edits produce an explicit refresh-required error.
 No worker privilege is granted to the browser or ordinary Hub roles.
 
-In **Settings → Notification templates**, select a notification type, edit the
+In **Notifications → Notification templates** (moved from Settings in v1.0.10),
+select a notification type, edit the
 heading/email subject/message/button wording, and select permitted detail fields.
 Use supported `{FieldName}` placeholders shown for that type. Save or discard
 changes before switching types. **Restore and save default** removes that override.

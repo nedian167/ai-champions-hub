@@ -1,19 +1,28 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { build } from 'vite';
 import { buildFlows } from '../deploy/notifications/flows.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url)).replaceAll('\\', '/');
+const require = createRequire(import.meta.url);
 const bundle = await build({
   configFile: false,
   logLevel: 'silent',
+  esbuild: { jsx: 'automatic' },
   plugins: [{
     name: 'notification-test-boundaries',
     enforce: 'pre',
     resolveId(id) {
       if (id.endsWith('notification-entry')) return '\0notification-entry';
       if (id === '@microsoft/power-apps/data') return '\0notification-client';
+      if (id === '../context/AppDataContext') return '\0notification-screen-context';
+      if (['react', 'react/jsx-runtime'].includes(id)) {
+        return { id: pathToFileURL(require.resolve(id)).href, external: true };
+      }
     },
     load(id) {
       if (id === '\0notification-entry') return [
@@ -22,8 +31,12 @@ const bundle = await build({
         `export * from '${root}src/lib/requestThread.ts';`,
         `export * from '${root}src/lib/notificationTemplates.ts';`,
         `export * from '${root}src/data/notificationTemplates.ts';`,
+        `export { default as NotificationsScreen } from '${root}src/screens/NotificationsScreen.tsx';`,
+        `export { default as SettingsScreen } from '${root}src/screens/SettingsScreen.tsx';`,
+        `export { ToastProvider } from '${root}src/components/Toast.tsx';`,
       ].join('\n');
       if (id === '\0notification-client') return 'export const getClient = () => globalThis.__notificationClientTest;';
+      if (id === '\0notification-screen-context') return 'export const useAppData = () => globalThis.__notificationScreenContextTest;';
     },
   }],
   build: { write: false, minify: false, lib: { entry: 'notification-entry', formats: ['es'] } },
@@ -68,7 +81,44 @@ globalThis.__notificationClientTest = {
   },
 };
 const api = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
-beforeEach(() => { stored = []; calls = []; failure = null; templateRaw = null; templateConflict = false; });
+beforeEach(() => {
+  stored = []; calls = []; failure = null; templateRaw = null; templateConflict = false;
+  globalThis.__notificationScreenContextTest = {
+    currentUser: { objectId: userId, userPrincipalName: 'user@example.test' },
+    isAdmin: false, isBootstrapAdmin: false,
+    settings: null, appAdmins: [], champions: [], departments: [], requestCategories: [],
+  };
+});
+
+function renderScreen(Screen) {
+  return renderToStaticMarkup(createElement(api.ToastProvider, null, createElement(Screen)));
+}
+
+test('persistent admins can access templates on Notifications while personal preferences load', () => {
+  globalThis.__notificationScreenContextTest.isAdmin = true;
+  const html = renderScreen(api.NotificationsScreen);
+  assert.match(html, /Notification templates/);
+  assert.match(html, /Loading your notification preferences/);
+  assert.match(html, /Loading templates/);
+});
+test('Settings no longer contains the template editor for admins', () => {
+  globalThis.__notificationScreenContextTest.isAdmin = true;
+  const html = renderScreen(api.SettingsScreen);
+  assert.match(html, /Program Configuration/);
+  assert.doesNotMatch(html, /Notification templates|Loading templates/);
+});
+for (const [role, flags] of [
+  ['end users', { isAdmin: false, isBootstrapAdmin: false }],
+  ['bootstrap admins', { isAdmin: true, isBootstrapAdmin: true }],
+]) {
+  test(`Notifications preserves personal access without exposing templates to ${role}`, () => {
+    Object.assign(globalThis.__notificationScreenContextTest, flags);
+    const html = renderScreen(api.NotificationsScreen);
+    assert.match(html, /<h1>Notifications<\/h1>/);
+    assert.match(html, /Loading your notification preferences/);
+    assert.doesNotMatch(html, /Notification templates|Loading templates/);
+  });
+}
 
 test('every notification type has a valid structured default without sensitive excerpts', () => {
   assert.equal(api.templateKinds.length, 12);

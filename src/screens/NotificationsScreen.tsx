@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAppData } from '../context/AppDataContext';
 import { Card, EmptyState } from '../components/ui';
 import { useToast } from '../components/Toast';
+import NotificationTemplatesEditor from '../components/NotificationTemplatesEditor';
 import {
   loadNotificationPreferences, saveNotificationPreferences, loadNotificationDeliveries,
   type NotificationPreference, type NotificationDelivery,
@@ -13,7 +14,7 @@ import {
 import { formatDate } from '../lib/format';
 
 export default function NotificationsScreen() {
-  const { currentUser } = useAppData();
+  const { currentUser, isAdmin, isBootstrapAdmin } = useAppData();
   const toast = useToast();
   const [record, setRecord] = useState<NotificationPreference | null>(null);
   const [form, setForm] = useState<NotificationSettings>({ ...defaultNotificationSettings });
@@ -128,6 +129,7 @@ export default function NotificationsScreen() {
           </Card>
         </>
       )}
+      {isAdmin && !isBootstrapAdmin && <NotificationTemplatesEditor />}
     </>
   );
 }

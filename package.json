@@ -1,7 +1,7 @@
 {
   "name": "vite",
   "private": true,
-  "version": "1.0.9",
+  "version": "1.0.10",
   "type": "module",
   "scripts": {
     "test:champions": "node --test tests/champions.test.mjs",
